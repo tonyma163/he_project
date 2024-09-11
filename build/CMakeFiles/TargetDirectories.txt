@@ -1,0 +1,3 @@
+/home/tony/Github/project/build/CMakeFiles/test.dir
+/home/tony/Github/project/build/CMakeFiles/edit_cache.dir
+/home/tony/Github/project/build/CMakeFiles/rebuild_cache.dir
