@@ -11,11 +11,15 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 # CUDA separable compilation
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
+# Python
+find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
+
+# Phantom-fhe library
 include_directories(/phantom)
 
-#
+# Execute the specified file
 add_executable(test test.cu)
 
+# Link libraries
 target_link_libraries(test /usr/local/lib/libPhantom.so)
 target_include_directories(test PUBLIC ${CMAKE_SOURCE_DIR}/include)
-

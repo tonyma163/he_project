@@ -8,6 +8,7 @@
 #include <vector>
 #include "phantom.h"
 #include "util.cuh"
+#include <cstdlib>
 
 using namespace std;
 using namespace phantom;
@@ -15,6 +16,11 @@ using namespace phantom::arith;
 using namespace phantom::util;
 
 int main() {
+
+	// Call test.py
+	string command = "python3 ../python/test.py";
+	system(command.c_str());
+
 	std::cout << "phantom-fhe" << endl;
 	
 	EncryptionParameters parms(scheme_type::ckks);
