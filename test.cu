@@ -84,23 +84,24 @@ int main() {
 	PhantomCiphertext ciphertext;
 	public_key.encrypt_asymmetric(context, plaintext, ciphertext);
 
-	/*
 	// * Save ciphertext
 	cout << "Saving ciphertext" << endl;
-	ofstream outfile("./tmp/ciphertext.txt", ofstream::binary);
+	struct stat info;
+	if( stat( "./tmp", &info ) != 0 )
+	system("mkdir tmp");
+	ofstream outfile("./tmp/process_ciphertext.txt", ofstream::binary);
     ciphertext.save(outfile);
     outfile.close();
-
-	// * Load ciphertext
+	
+	// * Load ciphertext - May Cause CUDA Memory Not Enough
 	cout << "Loading ciphertext" << endl;
-	ifstream infile("./tmp/ciphertext.txt", ifstream::binary);
-	PhantomCiphertext loaded_ciphertext;
-	loaded_ciphertext.load(infile);
+	ifstream infile("./tmp/process_ciphertext.txt", ifstream::binary);
+	PhantomCiphertext loaded_process_ciphertext;
+	loaded_process_ciphertext.load(infile);
 	infile.close();
-	*/
 
 	// Multiplication - origin * origin
-	PhantomCiphertext product_ciphertext = multiply(context, ciphertext, ciphertext);
+	PhantomCiphertext product_ciphertext = multiply(context, loaded_process_ciphertext, loaded_process_ciphertext);
 	relinearize_inplace(context, product_ciphertext, relin_keys);
 	rescale_to_next_inplace(context, product_ciphertext);
 
@@ -118,37 +119,37 @@ int main() {
 
 	// Multiplication - product * origin
 	product_ciphertext.set_scale(scale);
-	mod_switch_to_next_inplace(context, ciphertext);
-	PhantomCiphertext product_ciphertext2 = multiply(context, product_ciphertext, ciphertext);
+	mod_switch_to_next_inplace(context, loaded_process_ciphertext);
+	PhantomCiphertext product_ciphertext2 = multiply(context, product_ciphertext, loaded_process_ciphertext);
 	relinearize_inplace(context, product_ciphertext2, relin_keys);
 	rescale_to_next_inplace(context, product_ciphertext2);
 
 	// Multiplication - product * origin
 	product_ciphertext2.set_scale(scale);
-	mod_switch_to_next_inplace(context, ciphertext);
-	PhantomCiphertext product_ciphertext3 = multiply(context, product_ciphertext2, ciphertext);
+	mod_switch_to_next_inplace(context, loaded_process_ciphertext);
+	PhantomCiphertext product_ciphertext3 = multiply(context, product_ciphertext2, loaded_process_ciphertext);
 	relinearize_inplace(context, product_ciphertext3, relin_keys);
 	rescale_to_next_inplace(context, product_ciphertext3);
 
 	// * Save ciphertext
 	cout << "Saving ciphertext" << endl;
-	struct stat info;
+	//struct stat info;
 	if( stat( "./tmp", &info ) != 0 )
 	system("mkdir tmp");
-	ofstream outfile("./tmp/ciphertext.txt", ofstream::binary);
-    product_ciphertext3.save(outfile);
-    outfile.close();
+	ofstream outfile2("./tmp/final_ciphertext.txt", ofstream::binary);
+    product_ciphertext3.save(outfile2);
+    outfile2.close();
 	
 	// * Load ciphertext - May Cause CUDA Memory Not Enough
 	cout << "Loading ciphertext" << endl;
-	ifstream infile("./tmp/ciphertext.txt", ifstream::binary);
-	PhantomCiphertext loaded_ciphertext;
-	loaded_ciphertext.load(infile);
-	infile.close();
+	ifstream infile2("./tmp/final_ciphertext.txt", ifstream::binary);
+	PhantomCiphertext loaded_final_ciphertext;
+	loaded_final_ciphertext.load(infile2);
+	infile2.close();
 
 	// Decrypt and decode ciphertext
 	PhantomPlaintext decrypted_plaintext;
-	secret_key.decrypt(context, loaded_ciphertext, decrypted_plaintext);
+	secret_key.decrypt(context, loaded_final_ciphertext, decrypted_plaintext);
 	vector<double> output_vector;
 	encoder.decode(context, decrypted_plaintext, output_vector);
 
