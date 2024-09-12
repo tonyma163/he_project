@@ -9,6 +9,7 @@
 #include "phantom.h"
 #include "util.cuh"
 #include <cstdlib>
+#include <sys/stat.h>
 
 using namespace std;
 using namespace phantom;
@@ -131,28 +132,28 @@ int main() {
 
 	// * Save ciphertext
 	cout << "Saving ciphertext" << endl;
+	struct stat info;
+	if( stat( "./tmp", &info ) != 0 )
 	system("mkdir tmp");
 	ofstream outfile("./tmp/ciphertext.txt", ofstream::binary);
     product_ciphertext3.save(outfile);
     outfile.close();
-
-	/*
-	// * Load ciphertext CUDA Memory Not Enough
+	
+	// * Load ciphertext - May Cause CUDA Memory Not Enough
 	cout << "Loading ciphertext" << endl;
 	ifstream infile("./tmp/ciphertext.txt", ifstream::binary);
 	PhantomCiphertext loaded_ciphertext;
 	loaded_ciphertext.load(infile);
 	infile.close();
-	*/
 
 	// Decrypt and decode ciphertext
 	PhantomPlaintext decrypted_plaintext;
-	secret_key.decrypt(context, product_ciphertext3, decrypted_plaintext);
+	secret_key.decrypt(context, loaded_ciphertext, decrypted_plaintext);
 	vector<double> output_vector;
 	encoder.decode(context, decrypted_plaintext, output_vector);
 
 	// Print result
-	std::cout << "output_vector" << output_vector[0] <<endl;
+	std::cout << "output_vector: " << output_vector[0] <<endl;
 	
 	return 0;
 }
