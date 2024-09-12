@@ -18,8 +18,39 @@ using namespace phantom::util;
 int main() {
 
 	// Call test.py
+	system("mkdir ../python/outputs");
 	string command = "python3 ../python/test.py";
 	system(command.c_str());
+
+	// Fetch the array data from the output.txt
+	string output_folder = "../python/outputs";
+	ifstream file(output_folder+"/output.txt");
+
+	vector<double> values;
+	string row;
+
+	double num_scale = 1;
+
+	if (file.is_open()) {
+		while (getline(file, row)) {
+			
+			istringstream stream(row);
+			string value;
+
+			while (getline(stream, value, ',')) {
+				double num = stod(value);
+				values.push_back(num * num_scale);
+			}
+		}
+
+	}
+	file.close();
+
+	// print the arrary data
+	for (double val : values) {
+		std::cout << val << ",";
+	}
+	std::cout << endl;
 
 	std::cout << "phantom-fhe" << endl;
 	
@@ -27,7 +58,7 @@ int main() {
 	
 	size_t poly_modulus_degree = 8192;
 	parms.set_poly_modulus_degree(poly_modulus_degree);
-	parms.set_coeff_modulus(CoeffModulus::Create(poly_modulus_degree, {60, 40, 40, 40, 60}));
+	parms.set_coeff_modulus(CoeffModulus::Create(poly_modulus_degree, {60, 40, 40, 40, 40, 40, 60}));
 	
 	PhantomContext context(parms);
 
@@ -52,6 +83,21 @@ int main() {
 	PhantomCiphertext ciphertext;
 	public_key.encrypt_asymmetric(context, plaintext, ciphertext);
 
+	/*
+	// * Save ciphertext
+	cout << "Saving ciphertext" << endl;
+	ofstream outfile("./tmp/ciphertext.txt", ofstream::binary);
+    ciphertext.save(outfile);
+    outfile.close();
+
+	// * Load ciphertext
+	cout << "Loading ciphertext" << endl;
+	ifstream infile("./tmp/ciphertext.txt", ifstream::binary);
+	PhantomCiphertext loaded_ciphertext;
+	loaded_ciphertext.load(infile);
+	infile.close();
+	*/
+
 	// Multiplication - origin * origin
 	PhantomCiphertext product_ciphertext = multiply(context, ciphertext, ciphertext);
 	relinearize_inplace(context, product_ciphertext, relin_keys);
@@ -69,7 +115,6 @@ int main() {
 	add_inplace(context, product_ciphertext, ciphertext);
 	*/
 
-
 	// Multiplication - product * origin
 	product_ciphertext.set_scale(scale);
 	mod_switch_to_next_inplace(context, ciphertext);
@@ -83,6 +128,22 @@ int main() {
 	PhantomCiphertext product_ciphertext3 = multiply(context, product_ciphertext2, ciphertext);
 	relinearize_inplace(context, product_ciphertext3, relin_keys);
 	rescale_to_next_inplace(context, product_ciphertext3);
+
+	// * Save ciphertext
+	cout << "Saving ciphertext" << endl;
+	system("mkdir tmp");
+	ofstream outfile("./tmp/ciphertext.txt", ofstream::binary);
+    product_ciphertext3.save(outfile);
+    outfile.close();
+
+	/*
+	// * Load ciphertext CUDA Memory Not Enough
+	cout << "Loading ciphertext" << endl;
+	ifstream infile("./tmp/ciphertext.txt", ifstream::binary);
+	PhantomCiphertext loaded_ciphertext;
+	loaded_ciphertext.load(infile);
+	infile.close();
+	*/
 
 	// Decrypt and decode ciphertext
 	PhantomPlaintext decrypted_plaintext;
