@@ -18,24 +18,32 @@ trained = torch.load('SST-2-BERT-tiny.bin', map_location=torch.device('cpu'))
 model.load_state_dict(trained, strict=False)
 print(model)
 
-"""
 # Testing
 model.eval()
-text = "Yes Sir!"
+
+# Input data
+text = "Nuovo Cinema Paradiso has been an incredible movie! A gem in the italian culture."
 text = "[CLS] " + text + " [SEP]"
 
-#tokenized = tokenizer(text)
-tokenized_text = tokenizer.tokenize(text)
-indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-tokens_tensor = torch.tensor([indexed_tokens])
+# Tokenize input data
+#tokenized = tokenizer(text) # <- this would return the input_ids and attention mask as well
+tokenized_text = tokenizer.tokenize(text) # <- tokenize the input data
+indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text) # <- convert tokens into ids
+tokens_tensor = torch.tensor([indexed_tokens]) # <- convert token ids into tensor
 
-x = model.bert.embeddings(tokens_tensor, torch.tensor([[1] * len(tokenized_text)])) #
+#print("tokenized: ", tokenized)
+#print("tokenized_text: ", tokenized_text)
+#print("indexed_tokens: ", indexed_tokens)
+#print("tokens_tensor: ", tokens_tensor)
 
-test = tokenizer(text, return_tensors="pt")
+# Embedding calculation
+x = model.bert.embeddings(tokens_tensor, torch.tensor([[1] * len(tokenized_text)])) # require token ids tensor and attention mask list
 
-print("author: ", tokens_tensor)
-print("author2: ", x)
-print("\nnew: ",test)
+print("x: ", x)
 
-print(model(tokens_tensor))
-"""
+# Save the embedding into text file
+path = "./inputs/0"
+for i in range(len(x[0])):
+    if not (os.path.exists(path)):
+        os.makedirs(path)
+    np.savetxt("./inputs/0/input_{}.txt".format(i), x[0][i].detach(), delimiter=",")

@@ -3,3 +3,7 @@
 
 # checkpoints
 *.ipynb_checkpoints/
+
+# temp inputs outputs
+*.inputs/
+*.outputs/
