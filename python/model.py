@@ -10,10 +10,15 @@ hf_token = os.getenv('HF_TOKEN')
 
 # Load tokenizer & model
 logging.set_verbosity_error()
-tokenizer = AutoTokenizer.from_pretrained("gaunernst/bert-tiny-uncased", token=hf_token)
+tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny-mnli", token=hf_token)
 model = AutoModelForSequenceClassification.from_pretrained("prajjwal1/bert-tiny", token=hf_token)
+
+# Load fine-tuned model weights
+trained = torch.load('SST-2-BERT-tiny.bin', map_location=torch.device('cpu'))
+model.load_state_dict(trained, strict=False)
 print(model)
 
+"""
 # Testing
 model.eval()
 text = "Yes Sir!"
@@ -24,7 +29,7 @@ tokenized_text = tokenizer.tokenize(text)
 indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
 tokens_tensor = torch.tensor([indexed_tokens])
 
-x = model.bert.embeddings(tokens_tensor, torch.tensor([[1] * len(tokenized_text)]))
+x = model.bert.embeddings(tokens_tensor, torch.tensor([[1] * len(tokenized_text)])) #
 
 test = tokenizer(text, return_tensors="pt")
 
@@ -33,3 +38,4 @@ print("author2: ", x)
 print("\nnew: ",test)
 
 print(model(tokens_tensor))
+"""

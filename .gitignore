@@ -1,0 +1,5 @@
+# env files
+*.env
+
+# checkpoints
+*.ipynb_checkpoints/
