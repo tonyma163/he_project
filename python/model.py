@@ -94,3 +94,17 @@ dot_product = dot_product.permute([0, 2, 1, 3])
 dot_product = dot_product.reshape([1, input_tensor.size()[1], 128])
 
 print("dot_product: ", dot_product)
+
+
+# Self Output
+weight_output_dense = model.bert.encoder.layer[0].attention.output.dense.weight.clone().detach().double().transpose(0, 1)
+bias_output_dense = model.bert.encoder.layer[0].attention.output.dense.bias.clone().detach().double()
+
+print("x", x.shape)
+mean = x.mean(dim=-1, keepdim=True)
+
+#print("input_tensor: ", input_tensor)
+#mean = input_tensor.mean(dim=-1, keepdim=True)
+#variance = input_tensor.var(dim=-1, keepdim=True, unbiased=False)
+print(mean)
+#print(variance)
