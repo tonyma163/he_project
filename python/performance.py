@@ -24,7 +24,9 @@ dataset = pd.read_parquet("SST-2-val.parquet")
 
 #type = "./precomputed"
 #type = "./precomputed2"
-type = "./precomputed3"
+#type = "./precomputed3"
+#type = "./precomputed4"
+type = "./precomputed5"
 
 # ./precomputed
 """
@@ -44,10 +46,26 @@ Performance loss: 0.026027397260274032
 
 # ./precomputed3
 """
-1/100 of the dataset
+1/100 of the dataset (673/67349) ~= 1% of the dataset
 Accuracy plain: 0.8371559633027523
 Accuracy precom: 0.8142201834862385
 Performance loss: 0.027397260273972712
+"""
+
+# ./precomputed4
+"""
+1/1000 of the dataset (67/67349) ~= 0.1% of the dataset
+Accuracy plain: 0.8371559633027523
+Accuracy precom: 0.8061926605504587
+Performance loss: 0.03698630136986314
+"""
+
+# ./precomputed5
+"""
+1/10000 of the dataset (6/67349) ~= 0.008% of the dataset
+Accuracy plain: 0.8371559633027523
+Accuracy precom: 0.7637614678899083
+Performance loss: 0.0876712328767123
 """
 
 # Load precomputed means and variances

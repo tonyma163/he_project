@@ -24,10 +24,12 @@ model.eval()
 # Load training dataset
 dataset = load_dataset("stanfordnlp/sst2", split="train")
 
-# if only 1/100 dataset
-num_samples = int(0.01 * len(dataset))
+# if only 1/10000 dataset
+num_samples = int(0.0001 * len(dataset))
+print(f"{num_samples}/{len(dataset)}")
 dataset = dataset.shuffle(seed=42)
 subset_dataset = dataset.select(range(num_samples))
+
 
 # Tokenize the dataset
 def tokenize_function(example):
@@ -107,7 +109,7 @@ for layer, input_list in layernorm_inputs.items():
     inv_sqrt_var = 1.0 / torch.sqrt(var + epsilon)
 
     #
-    path = "./precomputed3"
+    path = "./precomputed5"
     if not (os.path.exists(path)):
         os.makedirs(path)
     # Save the means & inverse sqrt variance to text files
