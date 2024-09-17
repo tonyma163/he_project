@@ -18,7 +18,7 @@ find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
 include_directories(/phantom)
 
 # Execute the specified file
-add_executable(test test.cu)
+add_executable(test main.cu)
 
 # Link libraries
 target_link_libraries(test /usr/local/lib/libPhantom.so)
