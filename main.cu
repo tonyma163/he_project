@@ -26,6 +26,7 @@ string input_folder;
 string text;
 
 void setup_environment(int argc, char *argv[]);
+static inline vector<double> read_values_from_file(const string& filename, double scale);
 
 int main(int argc, char *argv[]) {
     // ./app_name.cu "{input_text}"
@@ -76,6 +77,7 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i=0; i<inputs_count; i++ ) {
+        /*
         vector<double> input_embeddings;
         
         string path = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
@@ -85,7 +87,6 @@ int main(int argc, char *argv[]) {
             cerr << "Error opening file: " << path << endl;
             continue;
         }
-        */
 
         string row;
         while (getline(file, row)) {
@@ -101,14 +102,17 @@ int main(int argc, char *argv[]) {
             }
         }
         file.close();
+        */
+
+        string filename = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
+        vector<double> input_embeddings = read_values_from_file(filename, scale);
+        vector<double> repeated;
 
         // check
         if (input_embeddings.size() < 128) {
             cerr << "Not enough embeddings in file: " << endl;
             continue;
-        }
-
-        vector<double> repeated;
+        }        
 
         for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
             for (int k=0; k<128; k++) {
@@ -151,4 +155,32 @@ void setup_environment(int argc, char *argv[]) {
 
         return;
     }
+}
+
+static inline vector<double> read_values_from_file(const string& filename, double scale) {
+    vector<double> values;
+    
+    ifstream file(filename);
+    /*
+    if (!file.is_open()) {
+        cerr << "Error opening file: " << filename << endl;
+        return values;
+    }
+    */
+
+    string row;
+    while (getline(file, row)) {
+        istringstream stream(row);
+        string value;
+        while (getline(stream, value, ',')) {
+            try {
+                double num = stod(value);
+                values.push_back(num * scale);
+            } catch (const invalid_argument& e) {
+                cerr << "Cannot convert: " << value << endl;
+            }
+        }
+    }
+    file.close();
+    return values;
 }
