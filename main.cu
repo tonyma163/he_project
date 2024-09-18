@@ -33,12 +33,13 @@ int main(int argc, char *argv[]) {
 
     // Encryption parameters
     EncryptionParameters parms(scheme_type::ckks);
-    size_t poly_modulus_degree = 16384;
+    //size_t poly_modulus_degree = 16384;
+    size_t poly_modulus_degree = 32768; // 16384*2
     parms.set_poly_modulus_degree(poly_modulus_degree);
 
     // Coefficient modulus
     parms.set_coeff_modulus(CoeffModulus::Create(
-        poly_modulus_degree, {60, 40, 40, 60}
+        poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60}
     ));
 
     // Context
@@ -60,19 +61,31 @@ int main(int argc, char *argv[]) {
     double scale = pow(2.0, 40);
 
     // Load embeddings
-    vector<double> input_embeddings;
+    //vector<double> input_embeddings;
 
     // no. of files in specified directory
     int inputs_count = 0;
-    filesystem::path path { "../python/tmp_embeddings" };
-    for (__attribute__((unused)) auto& p : filesystem::directory_iterator(path)) {
+    //filesystem::path path { "../python/tmp_embeddings" };
+    /*
+    for (__attribute__((unused)) auto& p : filesystem::directory_iterator("../python/tmp_embeddings")) {
+        ++inputs_count;
+    }
+    */
+    for (const auto& entry : filesystem::directory_iterator("../python/tmp_embeddings")) {
         ++inputs_count;
     }
 
     for (int i=0; i<inputs_count; i++ ) {
+        vector<double> input_embeddings;
+        
         string path = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
-
         ifstream file(path);
+        /*
+        if (!file.is_open()) {
+            cerr << "Error opening file: " << path << endl;
+            continue;
+        }
+        */
 
         string row;
         while (getline(file, row)) {
@@ -82,34 +95,37 @@ int main(int argc, char *argv[]) {
                 try {
                     double num = stod(value);
                     input_embeddings.push_back(num * scale);
-                } catch (const invalid_argument e) {
+                } catch (const invalid_argument& e) {
                     cerr << "Cannot convert: " << value << endl;
                 }
             }
         }
         file.close();
 
+        // check
+        if (input_embeddings.size() < 128) {
+            cerr << "Not enough embeddings in file: " << endl;
+            continue;
+        }
+
         vector<double> repeated;
 
         for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
-            for (int i=0; i<128; i++) {
+            for (int k=0; k<128; k++) {
                 repeated.push_back(input_embeddings[j]);
             }
         }
 
-        int size = static_cast<int>(repeated.size());
+        //cout << "size: " << repeated.size() << endl;
 
-        if (scale != 1) {
-            for (int i=0; i<size; i++) {
-                repeated[i] = repeated[i] * scale;
-            }
-        }
-
-        // encrypt it
-        cout << "repeated" << repeated[0]; // test
+        // encrypt input embeddings
+        //cout << "repeated" << repeated[0]; // test
+        PhantomPlaintext plaintext;
+        encoder.encode(context, repeated, scale, plaintext);
+        
+        PhantomCiphertext ciphertext;
+        public_key.encrypt_asymmetric(context, plaintext, ciphertext);
     }
-    
-    
 
     // Encoder1
 
