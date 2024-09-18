@@ -27,6 +27,7 @@ string text;
 
 void setup_environment(int argc, char *argv[]);
 static inline vector<double> read_values_from_file(const string& filename, double scale);
+//static inline PhantomPlaintext read_plain_repeated_input(PhantomContext context, PhantomPlaintext plaintext, const string& filename, double scale);
 
 int main(int argc, char *argv[]) {
     // ./app_name.cu "{input_text}"
@@ -76,34 +77,8 @@ int main(int argc, char *argv[]) {
         ++inputs_count;
     }
 
+    vector<PhantomCiphertext> inputs;
     for (int i=0; i<inputs_count; i++ ) {
-        /*
-        vector<double> input_embeddings;
-        
-        string path = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
-        ifstream file(path);
-        /*
-        if (!file.is_open()) {
-            cerr << "Error opening file: " << path << endl;
-            continue;
-        }
-
-        string row;
-        while (getline(file, row)) {
-            istringstream stream(row);
-            string value;
-            while (getline(stream, value, ',')) {
-                try {
-                    double num = stod(value);
-                    input_embeddings.push_back(num * scale);
-                } catch (const invalid_argument& e) {
-                    cerr << "Cannot convert: " << value << endl;
-                }
-            }
-        }
-        file.close();
-        */
-
         string filename = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
         vector<double> input_embeddings = read_values_from_file(filename, scale);
         vector<double> repeated;
@@ -129,9 +104,27 @@ int main(int argc, char *argv[]) {
         
         PhantomCiphertext ciphertext;
         public_key.encrypt_asymmetric(context, plaintext, ciphertext);
+
+        inputs.push_back(ciphertext);
     }
 
     // Encoder1
+    vector<double> query_weight_vec = read_values_from_file("../weights-sst2/layer0_attself_query_weight.txt", scale);
+    PhantomPlaintext query_w_pt;
+    encoder.encode(context, query_weight_vec, scale, query_w_pt);
+
+    /*
+    vector<double> query_bias_vec = read_values_from_file("../weights-sst2/layer0_attself_query_weight.txt", scale);
+    
+    for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
+        for (int k=0; k<128; k++) {
+            repeated.push_back(input_embeddings[j]);
+        }
+    }
+
+    PhantomPlaintext query_w_pt;
+    encoder.encode(context, query_weight_vec, scale, query_w_pt);
+    */
 
     return 0;
 }
@@ -184,3 +177,26 @@ static inline vector<double> read_values_from_file(const string& filename, doubl
     file.close();
     return values;
 }
+
+/*
+static inline PhantomPlaintext read_plain_repeated_input(PhantomContext context, PhantomPlaintext plaintext, const string& filename, double scale) {
+    vector<double> input = read_values_from_file(filename);
+
+    vector<double> repeated;
+    // check
+    if (input_embeddings.size() < 128) {
+        cerr << "Not enough embeddings in file: " << endl;
+        continue;
+    }
+
+    for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
+        for (int k=0; k<128; k++) {
+            repeated.push_back(input_embeddings[j]);
+        }
+    }
+
+    encoder.encode(context, repeated, scale, plaintext);
+
+    return plaintext;
+}
+*/
