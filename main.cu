@@ -43,7 +43,8 @@ int main(int argc, char *argv[]) {
 
     // Coefficient modulus
     parms.set_coeff_modulus(CoeffModulus::Create(
-        poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60}
+        //poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60} // 40*14 max for my laptop
+        poly_modulus_degree, {60, 40, 60}
     ));
 
     // Context
