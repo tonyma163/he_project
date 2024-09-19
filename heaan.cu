@@ -1,95 +1,63 @@
 #include <iostream>
 #include <vector>
-//#include <complex>
 #include "HEaaN/HEaaN.hpp"
 
 using namespace std;
 using namespace HEaaN;
 
 int main() {
-    Context context = makeContext(ParameterPreset::FVa);
+    // Initialize context
+    Context context = makeContext(ParameterPreset::FGa); // FGa - Precision optimal FG parameter
 
-    SecretKey sk(context);
-
-    KeyGenerator keygen(context, sk);
-    keygen.genEncryptionKey();
-    keygen.genMultiplicationKey();
+    // Initialize keys
+    SecretKey sk(context); // generate secret key
+    KeyGenerator keygen(context, sk); // generate public key
+    keygen.genEncryptionKey(); // generate encryption key
+    keygen.genMultiplicationKey(); // generate multiplication key
     KeyPack keypack = keygen.getKeyPack();
 
+    // Initialize encryptor, decryptor, encoder, evaluator
     Encryptor encryptor(context);
     Decryptor decryptor(context);
     EnDecoder encoder(context);
     HomEvaluator evaluator(context, keypack);
+    
+    // Messages
+    Message msg1(1);
+    Message msg2(1);
 
-    // input data
-    vector<Complex> vec1 = { Complex{1.0, 0.0}, Complex{2.0, 0.0} };
-    vector<Complex> vec2 = { Complex{2.0, 0.0}, Complex{3.0, 0.0} };
+    msg1[0] = Complex(1.0, 0.0); msg1[1] = Complex(2.0, 0.0); // {1, 2}
+    msg2[0] = Complex(2.0, 0.0); msg2[1] = Complex(3.0, 0.0); // {2, 3}
 
-    //
-    Message msg1(2);
-    Message msg2(2);
-
-    msg1[0] = vec1[0]; msg1[1] = vec1[1];
-    msg2[0] = vec2[0]; msg2[1] = vec2[1];
-
-    // Encode the message
+    // Encode the messages
     Plaintext ptxt1 = encoder.encode(msg1);
     Plaintext ptxt2 = encoder.encode(msg2);
 
-    // Encrypt the plaintext
+    // Encrypt the messages
     Ciphertext ctxt1(context);
     Ciphertext ctxt2(context);
     encryptor.encrypt(msg1, keypack, ctxt1);
     encryptor.encrypt(msg2, keypack, ctxt2);
 
-    cout << "Scale Factor: " << ctxt1.getCurrentScaleFactor() << endl;
-    cout << "Rescale Counter: " << ctxt1.getRescaleCounter() << endl;
+    // Multiplication
+    Ciphertext ctxt_result1(context);
+    evaluator.add(ctxt1, ctxt2, ctxt_result1); // result = 3 5
 
     // Multiplication
-    Ciphertext ctxt_result(context);
-    evaluator.mult(ctxt1, ctxt2, ctxt_result);
-
-    cout << "Scale Factor: " << ctxt_result.getCurrentScaleFactor() << endl;
-    cout << "Rescale Counter: " << ctxt1.getRescaleCounter() << endl;
-
-    //evaluator.rescale(ctxt_result);
-
-    /*
-    // Square
-    Ciphertext squaredCiphertext(context);
-    evaluator.square(ciphertext, squaredCiphertext);
-    evaluator.rescale(squaredCiphertext);
-
-    // squared level
-    cout << "squared level: " << squaredCiphertext.getLevel() << endl;
-
-    if (squaredCiphertext.getLevel() < 1) {
-        cerr << "Not enough levels for further multiplication" << endl;
-        return -1;
-    }
+    Ciphertext ctxt_result2(context);
+    evaluator.mult(ctxt_result1, ctxt_result1, ctxt_result2); // result = 9 25
 
     // Multiplication
-    Ciphertext resultCiphertext(context);
-    evaluator.mult(squaredCiphertext, ciphertext, resultCiphertext);
-    evaluator.rescale(resultCiphertext);
-    */
+    Ciphertext ctxt_result3(context);
+    evaluator.mult(ctxt_result1, ctxt_result2, ctxt_result3); // result = 27 125
 
     // Decrypt the result
-    Message decrypted;
-    decryptor.decrypt(ctxt_result, sk, decrypted);
+    Message decrypted_result;
+    decryptor.decrypt(ctxt_result3, sk, decrypted_result);
 
     // Print the result
-    /*
-    for (size_t i=0; decryptedMessage.getSize(); ++i) {
-        cout << decryptedMessage[i] << endl;
-    }
-    */
-    cout << decrypted[0].real() << endl;
-    cout << decrypted[1].real() << endl;
-    cout << decrypted[2].real() << endl;
-    cout << decrypted[3].real() << endl;
-
-
+    cout << decrypted_result[0].real() << endl;
+    cout << decrypted_result[1].real() << endl;
 
     return 0;
 }
