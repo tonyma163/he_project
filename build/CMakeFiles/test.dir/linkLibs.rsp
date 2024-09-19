@@ -1,1 +1,1 @@
- -Wl,-rpath,/usr/local/lib /usr/local/lib/libPhantom.so -lcudadevrt -lcudart_static -lrt -lpthread -ldl 
+ -Wl,-rpath,/usr/local/lib /usr/local/lib/libPhantom.so /usr/local/lib/libHEaaN.so -lcudadevrt -lcudart_static -lrt -lpthread -ldl 

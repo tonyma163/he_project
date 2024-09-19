@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
   "CMakeFiles/test.dir/cmake_device_link.o"
-  "CMakeFiles/test.dir/main.cu.o"
-  "CMakeFiles/test.dir/main.cu.o.d"
+  "CMakeFiles/test.dir/heaan.cu.o"
+  "CMakeFiles/test.dir/heaan.cu.o.d"
   "test"
   "test.pdb"
 )

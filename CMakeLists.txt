@@ -17,9 +17,14 @@ find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
 # Phantom-fhe library
 include_directories(/phantom)
 
+# HEaaN
+include_directories(../HEaaN)
+
 # Execute the specified file
-add_executable(test main.cu)
+#add_executable(test main.cu)
+add_executable(test heaan.cu)
 
 # Link libraries
 target_link_libraries(test /usr/local/lib/libPhantom.so)
+target_link_libraries(test /usr/local/lib/libHEaaN.so)
 target_include_directories(test PUBLIC ${CMAKE_SOURCE_DIR}/include)
