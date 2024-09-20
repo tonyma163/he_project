@@ -21,8 +21,9 @@ include_directories(/phantom)
 include_directories(../HEaaN)
 
 # Execute the specified file
-#add_executable(test main.cu)
-add_executable(test heaan.cu)
+add_executable(test main.cu)
+#add_executable(test heaan.cu)
+#add_executable(test phantom.cu)
 
 # Link libraries
 target_link_libraries(test /usr/local/lib/libPhantom.so)

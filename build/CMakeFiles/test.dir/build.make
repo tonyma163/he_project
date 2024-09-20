@@ -69,29 +69,29 @@ include CMakeFiles/test.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/test.dir/flags.make
 
-CMakeFiles/test.dir/heaan.cu.o: CMakeFiles/test.dir/flags.make
-CMakeFiles/test.dir/heaan.cu.o: CMakeFiles/test.dir/includes_CUDA.rsp
-CMakeFiles/test.dir/heaan.cu.o: /home/tony/Github/project/heaan.cu
-CMakeFiles/test.dir/heaan.cu.o: CMakeFiles/test.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/tony/Github/project/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CUDA object CMakeFiles/test.dir/heaan.cu.o"
-	/usr/local/cuda-12.6/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/test.dir/heaan.cu.o -MF CMakeFiles/test.dir/heaan.cu.o.d -x cu -rdc=true -c /home/tony/Github/project/heaan.cu -o CMakeFiles/test.dir/heaan.cu.o
+CMakeFiles/test.dir/main.cu.o: CMakeFiles/test.dir/flags.make
+CMakeFiles/test.dir/main.cu.o: CMakeFiles/test.dir/includes_CUDA.rsp
+CMakeFiles/test.dir/main.cu.o: /home/tony/Github/project/main.cu
+CMakeFiles/test.dir/main.cu.o: CMakeFiles/test.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/tony/Github/project/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CUDA object CMakeFiles/test.dir/main.cu.o"
+	/usr/local/cuda-12.6/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/test.dir/main.cu.o -MF CMakeFiles/test.dir/main.cu.o.d -x cu -rdc=true -c /home/tony/Github/project/main.cu -o CMakeFiles/test.dir/main.cu.o
 
-CMakeFiles/test.dir/heaan.cu.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/test.dir/heaan.cu.i"
+CMakeFiles/test.dir/main.cu.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/test.dir/main.cu.i"
 	$(CMAKE_COMMAND) -E cmake_unimplemented_variable CMAKE_CUDA_CREATE_PREPROCESSED_SOURCE
 
-CMakeFiles/test.dir/heaan.cu.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CUDA source to assembly CMakeFiles/test.dir/heaan.cu.s"
+CMakeFiles/test.dir/main.cu.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CUDA source to assembly CMakeFiles/test.dir/main.cu.s"
 	$(CMAKE_COMMAND) -E cmake_unimplemented_variable CMAKE_CUDA_CREATE_ASSEMBLY_SOURCE
 
 # Object files for target test
 test_OBJECTS = \
-"CMakeFiles/test.dir/heaan.cu.o"
+"CMakeFiles/test.dir/main.cu.o"
 
 # External object files for target test
 test_EXTERNAL_OBJECTS =
 
-CMakeFiles/test.dir/cmake_device_link.o: CMakeFiles/test.dir/heaan.cu.o
+CMakeFiles/test.dir/cmake_device_link.o: CMakeFiles/test.dir/main.cu.o
 CMakeFiles/test.dir/cmake_device_link.o: CMakeFiles/test.dir/build.make
 CMakeFiles/test.dir/cmake_device_link.o: /usr/local/lib/libPhantom.so
 CMakeFiles/test.dir/cmake_device_link.o: /usr/local/lib/libHEaaN.so
@@ -107,12 +107,12 @@ CMakeFiles/test.dir/build: CMakeFiles/test.dir/cmake_device_link.o
 
 # Object files for target test
 test_OBJECTS = \
-"CMakeFiles/test.dir/heaan.cu.o"
+"CMakeFiles/test.dir/main.cu.o"
 
 # External object files for target test
 test_EXTERNAL_OBJECTS =
 
-test: CMakeFiles/test.dir/heaan.cu.o
+test: CMakeFiles/test.dir/main.cu.o
 test: CMakeFiles/test.dir/build.make
 test: /usr/local/lib/libPhantom.so
 test: /usr/local/lib/libHEaaN.so

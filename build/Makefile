@@ -129,29 +129,29 @@ test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/build
 .PHONY : test/fast
 
-heaan.o: heaan.cu.o
-.PHONY : heaan.o
+main.o: main.cu.o
+.PHONY : main.o
 
 # target to build an object file
-heaan.cu.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/heaan.cu.o
-.PHONY : heaan.cu.o
+main.cu.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/main.cu.o
+.PHONY : main.cu.o
 
-heaan.i: heaan.cu.i
-.PHONY : heaan.i
+main.i: main.cu.i
+.PHONY : main.i
 
 # target to preprocess a source file
-heaan.cu.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/heaan.cu.i
-.PHONY : heaan.cu.i
+main.cu.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/main.cu.i
+.PHONY : main.cu.i
 
-heaan.s: heaan.cu.s
-.PHONY : heaan.s
+main.s: main.cu.s
+.PHONY : main.s
 
 # target to generate assembly for a file
-heaan.cu.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/heaan.cu.s
-.PHONY : heaan.cu.s
+main.cu.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/main.cu.s
+.PHONY : main.cu.s
 
 # Help Target
 help:
@@ -162,9 +162,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... test"
-	@echo "... heaan.o"
-	@echo "... heaan.i"
-	@echo "... heaan.s"
+	@echo "... main.o"
+	@echo "... main.i"
+	@echo "... main.s"
 .PHONY : help
 
 

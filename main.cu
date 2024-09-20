@@ -6,131 +6,76 @@
 #include <mutex>
 #include <random>
 #include <vector>
-#include "phantom.h"
 #include "util.cuh"
 #include <cstdlib>
 #include <sys/stat.h>
 #include <filesystem>
 #include <cmath>
+#include <iostream>
+#include <vector>
+#include "HEaaN/HEaaN.hpp"
 
 using namespace std;
-using namespace phantom;
-using namespace phantom::arith;
-using namespace phantom::util;
+using namespace HEaaN;
 
 //Set to True to test the program on the IDE
 bool IDE_MODE = true;
 
 string input_folder;
 
+int scale = 1;
+
+int num_slots = 16384;
+
 //Argument
 string text;
 
 void setup_environment(int argc, char *argv[]);
 static inline vector<double> read_values_from_file(const string& filename, double scale);
-static inline vector<double> read_plain_repeated_input(const string& filename, double scale);
-vector<PhantomCiphertext> matmulRE(PhantomContext &context, const vector<PhantomCiphertext> rows, const PhantomPlaintext &weight, const PhantomPlaintext &bias, double scale, PhantomRelinKey &relin_keys, PhantomGaloisKey &galois_keys);
+Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
+
+inline size_t log2ceil(size_t x) {
+    size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
+    return y;
+}
 
 int main(int argc, char *argv[]) {
     // ./app_name.cu "{input_text}"
     setup_environment(argc, argv);
 
-    // Encryption parameters
-    EncryptionParameters parms(scheme_type::ckks);
-    //size_t poly_modulus_degree = 16384;
-    size_t poly_modulus_degree = 32768; // 16384*2
-    parms.set_poly_modulus_degree(poly_modulus_degree);
+    // Initialize context
+    Context context = makeContext(ParameterPreset::FGa); // FGa - Precision optimal FG parameter
 
-    // Coefficient modulus
-    parms.set_coeff_modulus(CoeffModulus::Create(
-        //poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60} // 40*14 max for my laptop
-        poly_modulus_degree, {60, 40, 60}
-    ));
+    // Initialize keys
+    SecretKey sk(context); // generate secret key
+    KeyGenerator keygen(context, sk); // generate public key
+    keygen.genEncryptionKey(); // generate encryption key
+    keygen.genMultiplicationKey(); // generate multiplication key
+    KeyPack keypack = keygen.getKeyPack();
 
-    // Context
-    PhantomContext context(parms);
+    // Initialize encryptor, decryptor, encoder, evaluator
+    Encryptor encryptor(context);
+    Decryptor decryptor(context);
+    EnDecoder encoder(context);
+    HomEvaluator evaluator(context, keypack);
 
-    // Keys
-    // secret & public keys
-    PhantomSecretKey secret_key(context);
-    PhantomPublicKey public_key = secret_key.gen_publickey(context);
-    // relinearization keys for multiplication
-    PhantomRelinKey relin_keys = secret_key.gen_relinkey(context);
-    // galois keys for rotation
-    PhantomGaloisKey galois_keys = secret_key.create_galois_keys(context);
-
-    // Encoder
-    PhantomCKKSEncoder encoder(context);
-
-    // Scale parameter
-    double scale = pow(2.0, 40);
+    cout << "Loaded." << endl;
 
     // Load embeddings
-    //vector<double> input_embeddings;
-
     // no. of files in specified directory
     int inputs_count = 0;
-    //filesystem::path path { "../python/tmp_embeddings" };
-    /*
-    for (__attribute__((unused)) auto& p : filesystem::directory_iterator("../python/tmp_embeddings")) {
-        ++inputs_count;
-    }
-    */
     for (const auto& entry : filesystem::directory_iterator("../python/tmp_embeddings")) {
         ++inputs_count;
     }
 
-    vector<PhantomCiphertext> inputs;
+    vector<Ciphertext> inputs;
     for (int i=0; i<inputs_count; i++ ) {
         string filename = "../python/tmp_embeddings/input_"+to_string(i)+".txt";
-        vector<double> input_embeddings = read_values_from_file(filename, scale);
-        vector<double> repeated;
-
-        // check
-        if (input_embeddings.size() < 128) {
-            cerr << "Not enough embeddings in file: " << endl;
-            continue;
-        }        
-
-        for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
-            for (int k=0; k<128; k++) {
-                repeated.push_back(input_embeddings[j]);
-            }
-        }
-
-        //cout << "size: " << repeated.size() << endl;
-
-        // encrypt input embeddings
-        //cout << "repeated" << repeated[0]; // test
-        PhantomPlaintext plaintext;
-        encoder.encode(context, repeated, scale, plaintext);
-        
-        PhantomCiphertext ciphertext;
-        public_key.encrypt_asymmetric(context, plaintext, ciphertext);
-
-        inputs.push_back(ciphertext);
+        Ciphertext ctxt = encrypt_expanded_input(context, encryptor, keypack, filename, scale);
+        inputs.push_back(ctxt);
     }
 
-    // Encoder1
-    // query
-    vector<double> query_weight_vec = read_values_from_file("../weights-sst2/layer0_attself_query_weight.txt", scale);
-    PhantomPlaintext query_weight_pt;
-    encoder.encode(context, query_weight_vec, scale, query_weight_pt);
-
-    vector<double> query_bias_vec = read_plain_repeated_input("../weights-sst2/layer0_attself_query_bias.txt", scale);
-    PhantomPlaintext query_bias_pt;
-    encoder.encode(context, query_bias_vec, scale, query_bias_pt);
-
-    // key
-    vector<double> key_weight_vec = read_values_from_file("../weights-sst2/layer0_attself_key_weight.txt", scale);
-    PhantomPlaintext key_weight_pt;
-    encoder.encode(context, key_weight_vec, scale, key_weight_pt);
-
-    vector<double> key_bias_vec = read_plain_repeated_input("../weights-sst2/layer0_attself_key_bias.txt", scale);
-    PhantomPlaintext key_bias_pt;
-    encoder.encode(context, key_bias_vec, scale, key_bias_pt);
-
-    vector<PhantomCiphertext> Q = matmulRE(context, inputs, query_weight_pt, query_bias_pt, scale, relin_keys, galois_keys);
+    cout << "inputs: " << inputs.size() << endl;
 
     return 0;
 }
@@ -155,6 +100,7 @@ void setup_environment(int argc, char *argv[]) {
         return;
     }
 }
+
 
 static inline vector<double> read_values_from_file(const string& filename, double scale) {
     vector<double> values;
@@ -184,61 +130,39 @@ static inline vector<double> read_values_from_file(const string& filename, doubl
     return values;
 }
 
-static inline vector<double> read_plain_repeated_input(const string& filename, double scale) {
-    vector<double> input = read_values_from_file(filename, scale);
+Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale) {
+    vector<double> input_embeddings = read_values_from_file(filename, scale);
 
     vector<double> repeated;
-    /*
     // check
-    if (input.size() < 128) {
+    if (input_embeddings.size() < 128) {
         cerr << "Not enough embeddings in file: " << endl;
-        return;
-    }
-    */
+    }        
 
     for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
         for (int k=0; k<128; k++) {
-            repeated.push_back(input[j]);
+            repeated.push_back(input_embeddings[j]);
         }
     }
 
-    return repeated;
-}
-
-void rotsum(PhantomContext &context, PhantomCiphertext &ciphertext, int slots, PhantomGaloisKey &galois_keys) {
-    //PhantomCiphertext result = in->Clone();
-
-    for (int i=0; i<log2(slots); i++) {
-        int steps = 1 << i; // 2^i
-
-        // rotate ciphertext
-        PhantomCiphertext rotated_ciphertext = ciphertext;
-        rotate_inplace(context, rotated_ciphertext, steps, galois_keys);
-
-        // add
-        add_inplace(context, ciphertext, rotated_ciphertext);
+    // pad the vector to match num_slots
+    if (repeated.size() < static_cast<size_t>(num_slots)) {
+        repeated.resize(num_slots, 0.0); // pad with zeros
+    } else if (repeated.size() > static_cast<size_t>(num_slots)) {
+        repeated.resize(num_slots);
     }
-}
+    //cout << "size: " << repeated.size() << endl;
 
-vector<PhantomCiphertext> matmulRE(PhantomContext &context, const vector<PhantomCiphertext> rows, const PhantomPlaintext &weight, const PhantomPlaintext &bias, double scale, PhantomRelinKey &relin_keys, PhantomGaloisKey &galois_keys) {
-    vector<PhantomCiphertext> columns;
-
-    for (int i=0; i<rows.size(); i++) {
-        // multipy the encrypted row with the plaintext weight
-        PhantomCiphertext product_ciphertext = multiply_plain(context, rows[i], weight);
-        relinearize_inplace(context, product_ciphertext, relin_keys);
-        rescale_to_next_inplace(context, product_ciphertext);
-        product_ciphertext.set_scale(scale);
-
-        // rotsum
-        rotsum(context, product_ciphertext, rows[i].size(), galois_keys);
-
-        // add bias
-        add_plain_inplace(context, product_ciphertext, bias);
-
-        //
-        columns.push_back(product_ciphertext);
+    // encrypt input embeddings
+    Message tmp_msg(log2ceil(num_slots));
+    for (int j=0; j<repeated.size(); ++j) {
+        tmp_msg[j] = Complex(repeated[j], 0.0);
     }
+    //cout << "converted." << endl;
 
-    return columns;
+    Ciphertext ctxt(context);
+    encryptor.encrypt(tmp_msg, keypack, ctxt);
+    //cout << "encrypted." << endl;
+
+    return ctxt;
 }
