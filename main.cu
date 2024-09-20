@@ -509,10 +509,11 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
         cout << "loop" << endl;
     }
     
+    // In Horner's Method, we may not require to boostrap the ciphertext for further operations since there are operated only 6 multiplications.
     //cout << "ready for boostrapping" << endl;
     // bootstrapping
-    bootstrapper.bootstrap(res, res);
-    cout << "boostrapped" << endl;
+    //bootstrapper.bootstrap(res, res);
+    //cout << "boostrapped" << endl;
 
     // Create the mask vector
     vector<double> mask(num_slots, -1.0); // Initialize all to -1
