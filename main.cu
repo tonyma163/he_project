@@ -36,6 +36,8 @@ Ciphertext encrypt_input(Context context, Encryptor encryptor, KeyPack keypack, 
 Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias, double scale);
 Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors);
+Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Ciphertext> queries, const Ciphertext &key);
+Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -62,6 +64,7 @@ int main(int argc, char *argv[]) {
     Decryptor decryptor(context);
     EnDecoder encoder(context);
     HomEvaluator evaluator(context, keypack);
+    Bootstrapper bootstrapper(evaluator);
 
     cout << "Loaded." << endl;
 
@@ -110,7 +113,15 @@ int main(int argc, char *argv[]) {
     //cout << "MatMulRE K" << endl;
 
     Ciphertext K_wrapped = wrapUpRepeated(context, encoder, evaluator, K);
-    cout << "wrapped K" << endl;
+    //cout << "wrapped K" << endl;
+
+    Ciphertext scores = matmulScores(context, evaluator, Q, K_wrapped);
+    //cout << "scores" << endl;
+
+    scores = eval_exp(context, evaluator, bootstrapper, scores, inputs.size());
+    cout << "eval_exp" << endl;
+
+
 
     return 0;
 }
@@ -258,7 +269,7 @@ vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ci
         //cout << "mult" << endl;
 
         // rotsum
-        Ciphertext rotated = rotsum(context, evaluator, product_ciphertext, 128, 128);
+        Ciphertext rotated = rotsum(context, evaluator, product_ciphertext, 128, 1);
         //cout << "rotsum" << endl;
 
         // add bias
@@ -268,6 +279,26 @@ vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ci
 
         //
         columns.push_back(addedBias);
+    }
+
+    return columns;
+}
+
+vector<Ciphertext> matmulCR(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext& matrix) {
+    vector<Ciphertext> columns;
+
+    for (int i=0; i<rows.size(); i++) {
+        // multipy the encrypted row with the plaintext weight
+        Ciphertext product_ciphertext(context);
+        evaluator.mult(rows[i], matrix, product_ciphertext);
+        //cout << "mult" << endl;
+
+        // rotsum
+        Ciphertext rotated = rotsum(context, evaluator, product_ciphertext, 64, 1);
+        //cout << "rotsum" << endl;
+
+        //
+        columns.push_back(rotated);
     }
 
     return columns;
@@ -313,4 +344,113 @@ Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evalu
     }
 
     return aggregated;
+}
+
+Ciphertext mask_heads(Context context, HomEvaluator evaluator, Ciphertext& c, double mask_value) {
+    vector<double> mask;
+
+    for (int i=0; i<num_slots; i++) {
+        if (i%64 == 0) {
+            mask.push_back(mask_value);
+        } else {
+            mask.push_back(0);
+        }
+    }
+
+    Message tmp_msg(log2ceil(num_slots));
+    for (size_t i=0; i<num_slots; ++i) {
+        tmp_msg[i] = Complex(mask[i], 0.0);
+    }
+
+    // Multiply the ciphertext with the mask plaintext
+    Ciphertext masked_ctxt(context);
+    evaluator.mult(c, tmp_msg, masked_ctxt);
+
+    return masked_ctxt;
+}
+
+Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Ciphertext> queries, const Ciphertext &key) {
+    vector<Ciphertext> scores = matmulCR(context, evaluator, queries, key);
+
+    double r = 1/8.0; //Later corrected with e^(x/r)
+
+    Ciphertext scores_wrapped = mask_heads(context, evaluator, scores[scores.size()-1], 1/8.0*r);
+    Ciphertext rotated(context);
+    evaluator.rightRotate(scores_wrapped, 1, rotated);
+
+    for (int i=scores.size()-2; i>=0; i--) {
+        Ciphertext mask_headed =  mask_heads(context, evaluator, scores[i], 1/8.0*r);
+        evaluator.add(rotated, mask_headed, rotated);
+
+        if (i>0) evaluator.rightRotate(scores_wrapped, 1, rotated);
+    }
+
+    return rotated;
+}
+
+Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
+    // Coefficients of Taylor series for exp(x)
+    vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
+
+    // Initialize res with the constant term (1)
+    Message msg(log2ceil(num_slots));
+    msg[0] = Complex(coefficients[0], 0.0);
+    for (size_t i=1; i<num_slots; ++i) {
+        msg[i] = Complex(0.0, 0.0);
+    }
+    Ciphertext res(context);
+    evaluator.add(c, msg, res);
+
+    // Iterate through the coefficients to build the polynomial
+    for (size_t i=1; i<coefficients.size(); ++i) {
+        // Multiply c by itself i times to get c^i
+        Ciphertext c_power = c;
+        for (size_t j=0; i<i; ++j) {
+            evaluator.mult(c_power, c, c_power);
+        }
+
+        // Encode the coefficient
+        Message coef_msg(log2ceil(num_slots));
+        for (size_t k=0; k<num_slots; ++k) {
+            coef_msg[k] = Complex(coefficients[i], 0.0);
+        }
+
+        // Multiply c^i with the coefficient
+        Ciphertext term(context);
+        evaluator.mult(c_power, coef_msg, term);
+
+        // Add the term to res
+        evaluator.add(res, term, res);
+    }
+
+    cout << "ready for boostrapping" << endl;
+    // bootstrapping
+    bootstrapper.bootstrap(res, res, true);
+    cout << "boostrapped" << endl;
+
+    // Perform EvalMultMany equivalent: res^8 (multiply res by itself 7 times)
+    for (int i=0; i<7; i++) {
+        evaluator.mult(res, res, res);
+    }
+
+    // Create the mask vector
+    vector<double> mask(num_slots, -1.0); // Initialize all to -1
+    for (int i=0; i<num_slots; i++) {
+        // Assuming 128 * inputs_number as the upper bound
+        if (i % 64 < inputs_number && i < (128 * inputs_number)) {
+            mask[i] = 0.0;
+        }
+    }
+
+    //
+    Message mask_msg(log2ceil(num_slots));
+    for (size_t i=0; i<num_slots; ++i) {
+        mask_msg[i] = Complex(mask[i], 0.0);
+    }
+
+    // Add mask to res
+    Ciphertext final_res(context);
+    evaluator.add(res, mask_msg, final_res);
+
+    return final_res;
 }
