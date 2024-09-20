@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
     //cout << "wrapped K" << endl;
 
     Ciphertext scores = matmulScores(context, evaluator, Q, K_wrapped);
-    cout << "scores" << endl;
+    //cout << "scores" << endl;
 
     scores = eval_exp(context, evaluator, bootstrapper, scores, inputs.size());
     cout << "eval_exp" << endl;
@@ -390,8 +390,10 @@ Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Cipherte
     return rotated;
 }
 
+
+// Taylor Series
+// requires 21 multiplications
 /*
-// start from the beginning
 Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
     // Coefficients of Taylor series for exp(x)
     vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
@@ -407,33 +409,37 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
     evaluator.add(c, msg, res);
     cout << "added" << endl;
     
+    int counter = 1;
     // Iterate through the coefficients to build the polynomial
     for (size_t i=1; i<coefficients.size(); ++i) {
         // Multiply c by itself i times to get c^i
         Ciphertext c_power = c;
         for (size_t j=1; j<i; ++j) {
             evaluator.mult(c, c_power, c_power);
+            cout << "mult " << counter++ << endl;
         }
-        cout << "mult Level:" << c_power.getLevel() << endl;
+        //cout << "mult Level:" << c_power.getLevel() << endl;
 
         // Encode the coefficient
         Message coef_msg(log2ceil(num_slots));
         for (size_t k=0; k<num_slots; ++k) {
             coef_msg[k] = Complex(coefficients[i], 0.0);
         }
-        cout << "encoded" << endl;
+        //cout << "encoded" << endl;
 
         // Multiply c^i with the coefficient
         Ciphertext term(context);
         evaluator.mult(c_power, coef_msg, term);
-        cout << "mult2 Level:" << c_power.getLevel() << endl;
+        cout << "mult " << counter++ << endl;
+        //cout << "mult2 Level:" << c_power.getLevel() << endl;
 
         // Add the term to res
         evaluator.add(res, term, res);
-        cout << "add2" << endl;
+        //cout << "add2" << endl;
+        cout << "loop" << endl;
     }
     
-    cout << "ready for boostrapping" << endl;
+    //cout << "ready for boostrapping" << endl;
     // bootstrapping
     bootstrapper.bootstrap(res, res);
     cout << "boostrapped" << endl;
@@ -442,8 +448,8 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
     // Perform EvalMultMany equivalent: res^8 (multiply res by itself 7 times)
     for (int i=0; i<7; i++) {
         evaluator.mult(res, res, res);
+        cout << "mult " << counter++;
     }
-    
 
     // Create the mask vector
     vector<double> mask(num_slots, -1.0); // Initialize all to -1
@@ -468,8 +474,8 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
 }
 */
 
-
-// from the highest
+// Horner's Method
+// requires 6 multiplications
 Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
     // Coefficients of Taylor series for exp(x)
     vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
@@ -481,12 +487,13 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
     for (size_t i=1; i<num_slots; ++i) {
         msg[i] = Complex(0.0, 0.0);
     }
-   
-   Ciphertext res(context);
+
+    int counter = 1;
+    Ciphertext res(context);
     for (int i=coefficients.size()-2; i>=0; --i) {
         Ciphertext tmp(context);
         evaluator.mult(c, msg, tmp);
-        cout << "mult" << endl;
+        cout << "mult " << counter++ << endl;
 
         //bootstrapper.bootstrap(tmp, tmp);
         //cout << "bootstrap" << endl;
@@ -497,10 +504,12 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
             coef_msg[k] = Complex(coefficients[i], 0.0);
         }
         evaluator.add(tmp, coef_msg, res);
-        cout << "add" << endl;
+        //cout << "add" << endl;
+
+        cout << "loop" << endl;
     }
     
-    cout << "ready for boostrapping" << endl;
+    //cout << "ready for boostrapping" << endl;
     // bootstrapping
     bootstrapper.bootstrap(res, res);
     cout << "boostrapped" << endl;
