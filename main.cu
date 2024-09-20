@@ -105,6 +105,8 @@ int main(int argc, char *argv[]) {
     //vector<PhantomCiphertext> Q = matmulRE(context, inputs, query_weight_pt, query_bias_pt, scale, relin_keys, galois_keys);
     vector<Ciphertext> Q = matmulRE(context, evaluator, inputs, query_weight, query_bias, scale);
     cout << "MatMulRE Q" << endl;
+    vector<Ciphertext> K = matmulRE(context, evaluator, inputs, key_weight, key_bias, scale);
+    cout << "MatMulRE K" << endl;
 
     return 0;
 }
@@ -227,7 +229,7 @@ Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack 
 }
 
 Ciphertext rotsum(Context context, HomEvaluator evaluator, Ciphertext &in, int slots, int padding) {
-    Ciphertext result(context);
+    Ciphertext result = in;
 
     for (int i=0; i<log2ceil(slots); i++) {
         // calculate rotation steps: padding * 2^i
@@ -249,16 +251,16 @@ vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ci
         // multipy the encrypted row with the plaintext weight
         Ciphertext product_ciphertext(context);
         evaluator.mult(rows[i], weight, product_ciphertext);
-        cout << "mult" << endl;
+        //cout << "mult" << endl;
 
         // rotsum
         Ciphertext rotated = rotsum(context, evaluator, product_ciphertext, 128, 128);
-        cout << "rotsum" << endl;
+        //cout << "rotsum" << endl;
 
         // add bias
         Ciphertext addedBias(context);
         evaluator.add(rotated, bias, addedBias);
-        cout << "bias" << endl;
+        //cout << "bias" << endl;
 
         //
         columns.push_back(addedBias);
