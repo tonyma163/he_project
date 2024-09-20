@@ -390,49 +390,29 @@ Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Cipherte
     return rotated;
 }
 
+/*
+// start from the beginning
 Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
     // Coefficients of Taylor series for exp(x)
     vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
 
     // Initialize res with the constant term (1)
     Message msg(log2ceil(num_slots));
-    msg[0] = Complex(coefficients.back(), 0.0); // start from the highest degree
+    msg[0] = Complex(coefficients[0], 0.0); // start from the highest degree
     //cout << "Coefficients[0]: " << coefficients[0] << endl;
     for (size_t i=1; i<num_slots; ++i) {
         msg[i] = Complex(0.0, 0.0);
     }
-    /*
     Ciphertext res(context);
     evaluator.add(c, msg, res);
     cout << "added" << endl;
-    */
-
-   
-   Ciphertext res(context);
-    for (int i=coefficients.size()-2; i>=0; --i) {
-        Ciphertext tmp(context);
-        evaluator.mult(c, msg, tmp);
-        cout << "mult" << endl;
-
-        //bootstrapper.bootstrap(tmp, tmp);
-        //cout << "bootstrap" << endl;
-
-        //Encode the coefficient a_i
-        Message coef_msg(log2ceil(num_slots));
-        for (size_t k=0; k<num_slots; ++k) {
-            coef_msg[k] = Complex(coefficients[i], 0.0);
-        }
-        evaluator.add(tmp, coef_msg, res);
-        cout << "add" << endl;
-    }
     
-    /*
     // Iterate through the coefficients to build the polynomial
     for (size_t i=1; i<coefficients.size(); ++i) {
         // Multiply c by itself i times to get c^i
         Ciphertext c_power = c;
         for (size_t j=1; j<i; ++j) {
-            evaluator.mult(c_power, c, c_power);
+            evaluator.mult(c, c_power, c_power);
         }
         cout << "mult Level:" << c_power.getLevel() << endl;
 
@@ -452,19 +432,78 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
         evaluator.add(res, term, res);
         cout << "add2" << endl;
     }
-*/
     
     cout << "ready for boostrapping" << endl;
     // bootstrapping
     bootstrapper.bootstrap(res, res);
     cout << "boostrapped" << endl;
     
-    /*    
+        
     // Perform EvalMultMany equivalent: res^8 (multiply res by itself 7 times)
     for (int i=0; i<7; i++) {
         evaluator.mult(res, res, res);
     }
-    */
+    
+
+    // Create the mask vector
+    vector<double> mask(num_slots, -1.0); // Initialize all to -1
+    for (int i=0; i<num_slots; i++) {
+        // Assuming 128 * inputs_number as the upper bound
+        if (i % 64 < inputs_number && i < (128 * inputs_number)) {
+            mask[i] = 0.0;
+        }
+    }
+
+    //
+    Message mask_msg(log2ceil(num_slots));
+    for (size_t i=0; i<num_slots; ++i) {
+        mask_msg[i] = Complex(mask[i], 0.0);
+    }
+
+    // Add mask to res
+    Ciphertext final_res(context);
+    evaluator.add(res, mask_msg, final_res);
+
+    return final_res;
+}
+*/
+
+
+// from the highest
+Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
+    // Coefficients of Taylor series for exp(x)
+    vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
+
+    // Initialize res with the constant term (1)
+    Message msg(log2ceil(num_slots));
+    msg[0] = Complex(coefficients.back(), 0.0); // start from the highest degree
+    //cout << "Coefficients[0]: " << coefficients[0] << endl;
+    for (size_t i=1; i<num_slots; ++i) {
+        msg[i] = Complex(0.0, 0.0);
+    }
+   
+   Ciphertext res(context);
+    for (int i=coefficients.size()-2; i>=0; --i) {
+        Ciphertext tmp(context);
+        evaluator.mult(c, msg, tmp);
+        cout << "mult" << endl;
+
+        //bootstrapper.bootstrap(tmp, tmp);
+        //cout << "bootstrap" << endl;
+
+        //Encode the coefficient a_i
+        Message coef_msg(log2ceil(num_slots));
+        for (size_t k=0; k<num_slots; ++k) {
+            coef_msg[k] = Complex(coefficients[i], 0.0);
+        }
+        evaluator.add(tmp, coef_msg, res);
+        cout << "add" << endl;
+    }
+    
+    cout << "ready for boostrapping" << endl;
+    // bootstrapping
+    bootstrapper.bootstrap(res, res);
+    cout << "boostrapped" << endl;
 
     // Create the mask vector
     vector<double> mask(num_slots, -1.0); // Initialize all to -1
