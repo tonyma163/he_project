@@ -57,6 +57,8 @@ int main(int argc, char *argv[]) {
     keygen.genEncryptionKey(); // generate encryption key
     keygen.genMultiplicationKey(); // generate multiplication key
     keygen.genRotationKeyBundle();
+    keygen.genConjugationKey();
+    keygen.genRotKeysForBootstrap(log2ceil(num_slots));
     KeyPack keypack = keygen.getKeyPack();
 
     // Initialize encryptor, decryptor, encoder, evaluator
@@ -64,7 +66,7 @@ int main(int argc, char *argv[]) {
     Decryptor decryptor(context);
     EnDecoder encoder(context);
     HomEvaluator evaluator(context, keypack);
-    Bootstrapper bootstrapper(evaluator);
+    Bootstrapper bootstrapper(evaluator, log2ceil(num_slots));
 
     cout << "Loaded." << endl;
 
@@ -116,7 +118,7 @@ int main(int argc, char *argv[]) {
     //cout << "wrapped K" << endl;
 
     Ciphertext scores = matmulScores(context, evaluator, Q, K_wrapped);
-    //cout << "scores" << endl;
+    cout << "scores" << endl;
 
     scores = eval_exp(context, evaluator, bootstrapper, scores, inputs.size());
     cout << "eval_exp" << endl;
@@ -394,44 +396,75 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
 
     // Initialize res with the constant term (1)
     Message msg(log2ceil(num_slots));
-    msg[0] = Complex(coefficients[0], 0.0);
+    msg[0] = Complex(coefficients.back(), 0.0); // start from the highest degree
+    //cout << "Coefficients[0]: " << coefficients[0] << endl;
     for (size_t i=1; i<num_slots; ++i) {
         msg[i] = Complex(0.0, 0.0);
     }
+    /*
     Ciphertext res(context);
     evaluator.add(c, msg, res);
+    cout << "added" << endl;
+    */
 
+   
+   Ciphertext res(context);
+    for (int i=coefficients.size()-2; i>=0; --i) {
+        Ciphertext tmp(context);
+        evaluator.mult(c, msg, tmp);
+        cout << "mult" << endl;
+
+        //bootstrapper.bootstrap(tmp, tmp);
+        //cout << "bootstrap" << endl;
+
+        //Encode the coefficient a_i
+        Message coef_msg(log2ceil(num_slots));
+        for (size_t k=0; k<num_slots; ++k) {
+            coef_msg[k] = Complex(coefficients[i], 0.0);
+        }
+        evaluator.add(tmp, coef_msg, res);
+        cout << "add" << endl;
+    }
+    
+    /*
     // Iterate through the coefficients to build the polynomial
     for (size_t i=1; i<coefficients.size(); ++i) {
         // Multiply c by itself i times to get c^i
         Ciphertext c_power = c;
-        for (size_t j=0; i<i; ++j) {
+        for (size_t j=1; j<i; ++j) {
             evaluator.mult(c_power, c, c_power);
         }
+        cout << "mult Level:" << c_power.getLevel() << endl;
 
         // Encode the coefficient
         Message coef_msg(log2ceil(num_slots));
         for (size_t k=0; k<num_slots; ++k) {
             coef_msg[k] = Complex(coefficients[i], 0.0);
         }
+        cout << "encoded" << endl;
 
         // Multiply c^i with the coefficient
         Ciphertext term(context);
         evaluator.mult(c_power, coef_msg, term);
+        cout << "mult2 Level:" << c_power.getLevel() << endl;
 
         // Add the term to res
         evaluator.add(res, term, res);
+        cout << "add2" << endl;
     }
-
+*/
+    
     cout << "ready for boostrapping" << endl;
     // bootstrapping
-    bootstrapper.bootstrap(res, res, true);
+    bootstrapper.bootstrap(res, res);
     cout << "boostrapped" << endl;
-
+    
+    /*    
     // Perform EvalMultMany equivalent: res^8 (multiply res by itself 7 times)
     for (int i=0; i<7; i++) {
         evaluator.mult(res, res, res);
     }
+    */
 
     // Create the mask vector
     vector<double> mask(num_slots, -1.0); // Initialize all to -1
