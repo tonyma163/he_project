@@ -35,6 +35,7 @@ static inline vector<double> read_values_from_file(const string& filename, doubl
 Ciphertext encrypt_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias, double scale);
+Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -104,9 +105,12 @@ int main(int argc, char *argv[]) {
 
     //vector<PhantomCiphertext> Q = matmulRE(context, inputs, query_weight_pt, query_bias_pt, scale, relin_keys, galois_keys);
     vector<Ciphertext> Q = matmulRE(context, evaluator, inputs, query_weight, query_bias, scale);
-    cout << "MatMulRE Q" << endl;
+    //cout << "MatMulRE Q" << endl;
     vector<Ciphertext> K = matmulRE(context, evaluator, inputs, key_weight, key_bias, scale);
-    cout << "MatMulRE K" << endl;
+    //cout << "MatMulRE K" << endl;
+
+    Ciphertext K_wrapped = wrapUpRepeated(context, encoder, evaluator, K);
+    cout << "wrapped K" << endl;
 
     return 0;
 }
@@ -267,4 +271,46 @@ vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ci
     }
 
     return columns;
+}
+
+Ciphertext mask_block(Context context, EnDecoder encoder, HomEvaluator evaluator, Ciphertext& c, int from, int to, double mask_value) {
+
+    vector<complex<double>> mask(num_slots, 0.0);
+
+    for (int i=from; i<to && i<num_slots; ++i) {
+        mask[i] = mask_value;
+    }
+
+    Message tmp_msg(log2ceil(num_slots));
+    for (size_t i=0; i<num_slots; ++i) {
+        tmp_msg[i] = Complex(mask[i].real(), 0.0);
+    }
+
+    // Multiply the ciphertext with the mask plaintext
+    Ciphertext masked_ctxt(context);
+    evaluator.mult(c, tmp_msg, masked_ctxt);
+
+    return masked_ctxt;
+}
+
+Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors) {
+    vector<Ciphertext> masked;
+
+    for (int i=0; i<vectors.size(); i++) {
+        int from = 128 * i;
+        int to = 128 * (i+1);
+        Ciphertext masked_ctxt = mask_block(context, encoder, evaluator, vectors[i], from, to, 1.0);
+        masked.push_back(masked_ctxt);
+    }
+
+    // aggregate all masked ciphertexts by adding them together
+    Ciphertext aggregated(context);
+    if (!masked.empty()) {
+        aggregated = masked[0];
+        for (size_t i=1; i<masked.size(); ++i) {
+            evaluator.add(aggregated, masked[i], aggregated);
+        }
+    }
+
+    return aggregated;
 }
