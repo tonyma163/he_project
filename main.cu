@@ -34,6 +34,8 @@ int num_slots = 16384;
 string text;
 
 void setup_environment(int argc, char *argv[]);
+vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, vector<Ciphertext> inputs);
+
 static inline vector<double> read_values_from_file(const string& filename, double scale);
 Ciphertext encrypt_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
@@ -108,7 +110,14 @@ int main(int argc, char *argv[]) {
     //cout << "inputs: " << inputs.size() << endl;
 
     // Encoder1
-    // query
+    vector<Ciphertext> encoder1output = encoder1(context, encoder, encryptor, decryptor, evaluator, bootstrapper,sk, keypack, inputs);
+    cout << "#Encoder1 END" << endl;
+
+    return 0;
+}
+
+vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, vector<Ciphertext> inputs) {
+// query
     Ciphertext query_weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_attself_query_weight.txt", scale);
     //cout << "query_weight" << endl;
     //PhantomPlaintext query_weight_pt;
@@ -302,40 +311,39 @@ int main(int argc, char *argv[]) {
 
     Ciphertext output_bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_output_bias.txt", scale);
     output_bias.setLevel(unwrappedLargeOutput[0][0].getLevel()+1);
-    cout << "loaded" << endl;
+    //cout << "loaded" << endl;
 
     output = matmulCRlarge(context, evaluator, unwrappedLargeOutput, {output_weight_1, output_weight_2, output_weight_3, output_weight_4}, output_bias);
-    cout << "matmulCRlarge" << endl;
+    //cout << "matmulCRlarge" << endl;
 
     wrappedOutput = wrapUpExpanded(context, encoder, evaluator, output);
-    cout << "wrappedOutput" << endl;
+    //cout << "wrappedOutput" << endl;
 
     evaluator.add(wrappedOutput, output_copy, wrappedOutput);
-    cout << "add" << endl;
+    //cout << "add" << endl;
 
     precomputed_mean = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/layer0_output_mean.txt", -1);
     precomputed_mean.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, precomputed_mean, wrappedOutput);
-    cout << "add" << endl;
+    //cout << "add" << endl;
 
     vy = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_vy.txt", 1);
     vy.setLevel(wrappedOutput.getLevel());
     evaluator.mult(wrappedOutput, vy, wrappedOutput);
-    cout << "mult" << endl;
+    //cout << "mult" << endl;
 
     bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_output_normbias.txt", 1, inputs.size());
     bias.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, inputs.size(), wrappedOutput);
-    cout << "add" << endl;
+    //cout << "add" << endl;
 
     output = unwrapExpanded(context, evaluator, wrappedOutput, inputs.size());
-    cout << "unwrapExpanded" << endl;
+    //cout << "unwrapExpanded" << endl;
 
-    print_expanded(context, decryptor, sk, output[0], 0, 128, "Output (Expanded)");
+    //print_expanded(context, decryptor, sk, output[0], 0, 128, "Output (Expanded)");
     cout << "Bert Output END" << endl;
 
-
-    return 0;
+    return output;
 }
 
 void setup_environment(int argc, char *argv[]) {
