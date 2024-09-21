@@ -56,6 +56,8 @@ Ciphertext wrapUpExpanded(Context context, EnDecoder encoder, HomEvaluator evalu
 vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphertext c, int inputs_num);
 Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertext &c, int n, double mask_value);
 vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
+Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree);
+vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> containers, int input_number);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -262,41 +264,29 @@ int main(int argc, char *argv[]) {
 
     Ciphertext intermediate_bias = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_bias.txt", GELU_max_abs_value);
     intermediate_bias.setLevel(output[0].getLevel()+1);
-
-    cout << "loaded" << endl;
+    //cout << "loaded" << endl;
 
     output = matmulRElarge(context, evaluator, output, dense_weights, dense_bias, 1); // mask_value = 1
-    cout << "matmulRElarge" << endl;
-
-    output = generate_containers(evaluator, output, 0); // bias = nullptr -> 0
-    cout << "generated containers" << endl;
-
-    for (int i=0; i<output.size(); i++) {
-
-    }
-
-    // block 1
-    // VecMatER
-
-    // block 2
-    // VecMatER
-    // evalRot by -128
-
-    // block 3
-    // VecMatER
-    // evalRot by -256
-
-    // block 4
-    // VecMatER
-    // evalRot by -384
+    //cout << "matmulRElarge" << endl;
 
     // Concat blocks
-
     // wrapup in 4 containers
+    output = generate_containers(evaluator, output, 0); // bias = nullptr -> 0
+    //cout << "generated containers" << endl;
 
     // eval GELU(x)
+    for (int i=0; i<output.size(); i++) {
+        output[i] = eval_gelu_function(context, evaluator, bootstrapper, output[i], -1, 1, GELU_max_abs_value, 119);
+        bootstrapper.bootstrap(output[i], output[i]);
+    }
+    //cout << "eval GELU(x)" << endl;
 
     // unWrap
+    vector<vector<Ciphertext>> unwrappedLargeOutput = unwrapRepeatedLarge(context, encoder, evaluator, output, inputs.size());
+    //cout << "unwrappedLargeOutput" << endl;
+
+    //print(context, decryptor, sk, unwrappedLargeOutput[0][0], 128, "Intermediate (Containers)");
+    cout << "Bert Intermediate END" << endl;
 
     return 0;
 }
@@ -965,8 +955,31 @@ Ciphertext repeat(Context context, HomEvaluator evaluator, const Ciphertext &in,
 
     for (int i=0; i<log2(slots); i++) {
         Ciphertext rotated(context);
-        evaluator.rightRotate(res, pow(2, i), rotated); // -pow(2,i)
 
+        u64 value = -pow(2, i); // -pow(2,i)
+        if (value>0)
+            evaluator.leftRotate(res, value, rotated);
+        else
+            evaluator.rightRotate(res, value, rotated);
+
+        evaluator.add(res, rotated, res);
+    }
+
+    return res;
+}
+
+Ciphertext repeat(Context context, HomEvaluator evaluator, const Ciphertext &in, int slots, int padding) {
+    Ciphertext res = in;
+
+    for (int i=0; i<log2(slots); i++) {
+        Ciphertext rotated(context);
+
+        u64 value = padding*-pow(2, i); // -pow(2,i)
+        if (value>0)
+            evaluator.leftRotate(res, value, rotated);
+        else
+            evaluator.rightRotate(res, value, rotated);
+            
         evaluator.add(res, rotated, res);
     }
 
@@ -1213,4 +1226,98 @@ vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext
     }
 
     return containers;
+}
+
+Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree) {
+    // Get the coefficients
+    //vector<double> coefficients = EvalChebyshevCoefficients([](double x) -> double {return (0.5 * (x * (1/mult)) * (1 + erf((x * (1/mult)) / 1.41421356237))); }, min, max, degree);
+
+    //
+    auto gelu_scaled = [mult](double x) -> double {
+        double scaled_x = x / mult;
+        return 0.5 * scaled_x * (1.0 + erf(scaled_x / sqrt(2.0)));
+    };
+
+    vector<double> coefficients = EvalChebyshevCoefficients(gelu_scaled, min, max, degree);
+
+    Message msg(log2ceil(num_slots));
+    msg[0] = Complex(coefficients[degree], 0.0); // start from the highest degree
+    //cout << "Coefficients[0]: " << coefficients[0] << endl;
+    for (size_t i=1; i<num_slots; ++i) {
+        msg[i] = Complex(0.0, 0.0);
+    }
+
+    //int counter = 1;
+    Ciphertext product(context);
+    // Interate from a^n-1 down to a^0
+    for (int i=degree-1; i>=0; --i) {
+        // Multiply msg by ciphertext (c)
+        Ciphertext tmp(context);
+        evaluator.mult(c, msg, tmp);
+        //cout << "mult " << counter++ << endl;
+
+        //bootstrapper.bootstrap(tmp, tmp);
+        //cout << "bootstrap" << endl;
+
+        // Add the current coefficient a^i
+        Message coef_msg(log2ceil(num_slots));
+        for (size_t j=0; j<num_slots; ++j) {
+            coef_msg[j] = Complex(coefficients[i], 0.0);
+        }
+        evaluator.add(tmp, coef_msg, product);
+        //cout << "add" << endl;
+
+        //cout << "loop" << endl;
+    }
+
+    bootstrapper.bootstrap(product, product);
+    //cout << "bootstrap" << endl;
+
+    return product;
+}
+
+vector<Ciphertext> unwrap_512_in_4_128(Context context, EnDecoder encoder, HomEvaluator evaluator, Ciphertext &c, int index) {
+    vector<Ciphertext> result;
+
+    int shift = index * 512;
+
+    Ciphertext score1 = mask_block(context, encoder, evaluator, c, shift+0, shift+128, 1);
+    score1 = repeat(context, evaluator, score1, 128, -128);
+    Ciphertext score2 = mask_block(context, encoder, evaluator, c, shift+128, shift+256, 1);
+    score2 = repeat(context, evaluator, score2, 128, -128);
+    Ciphertext score3 = mask_block(context, encoder, evaluator, c, shift+256, shift+384, 1);
+    score3 = repeat(context, evaluator, score3, 128, -128);
+    Ciphertext score4 = mask_block(context, encoder, evaluator, c, shift+384, shift+512, 1);
+    score4 = repeat(context, evaluator, score4, 128, -128);
+
+    result.push_back(score1);
+    result.push_back(score2);
+    result.push_back(score3);
+    result.push_back(score4);
+
+    return result;
+
+}
+
+vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> containers, int input_number) {
+    vector<vector<Ciphertext>> unwrapped_output;
+    vector<int> quantities;
+
+    for (int i=0; i<input_number/32.0; i++) {
+        int quantity = 32;
+        if ((i + 1) * 32 > input_number) {
+            quantity = input_number - (i * 32);
+        }
+
+        quantities.push_back(quantity);
+    }
+
+    for (int i=0; i<containers.size(); i++) {
+        for (int j=0; j<quantities[i]; j++) {
+            vector<Ciphertext> unwrapped_container = unwrap_512_in_4_128(context, encoder, evaluator, containers[i], j);
+            unwrapped_output.push_back(unwrapped_container);
+        }
+    }
+
+    return unwrapped_output;
 }
