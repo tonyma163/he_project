@@ -42,6 +42,7 @@ Ciphertext rotsum(Context context, HomEvaluator evaluator, Ciphertext &in, int s
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias, int row_size, int padding);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, int row_size, int padding);
+vector<Ciphertext> matmulRElarge(Context &context, HomEvaluator &evaluator, vector<Ciphertext>& inputs, const vector<Ciphertext> &weights, const Ciphertext &bias, double mask_val);
 vector<Ciphertext> matmulCR(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext& matrix);
 vector<Ciphertext> matmulCR(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext& weight, const Ciphertext& bias);
 Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors);
@@ -53,6 +54,8 @@ void print(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext 
 void print_expanded(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots, int expansion_factor, string prefix);
 Ciphertext wrapUpExpanded(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors);
 vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphertext c, int inputs_num);
+Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertext &c, int n, double mask_value);
+vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -241,6 +244,59 @@ int main(int argc, char *argv[]) {
     //print_expanded(context, decryptor, sk, output[0], 0, 128, "Self-Output (Expanded)");
 
     cout << "Bert Self-Output END" << endl;
+
+    // Bert Intermediate Layer
+    double GELU_max_abs_value = 1 / 13.5;
+
+    // load 4 weights
+    Ciphertext intermediate_weight_1 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_weight1.txt", GELU_max_abs_value);
+    intermediate_weight_1.setLevel(wrappedOutput.getLevel());
+    Ciphertext intermediate_weight_2 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_weight2.txt", GELU_max_abs_value);
+    intermediate_weight_2.setLevel(wrappedOutput.getLevel());
+    Ciphertext intermediate_weight_3 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_weight3.txt", GELU_max_abs_value);
+    intermediate_weight_3.setLevel(wrappedOutput.getLevel());
+    Ciphertext intermediate_weight_4 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_weight4.txt", GELU_max_abs_value);
+    intermediate_weight_4.setLevel(wrappedOutput.getLevel());
+
+    vector<Ciphertext> dense_weights {intermediate_weight_1, intermediate_weight_2, intermediate_weight_3, intermediate_weight_4};
+
+    Ciphertext intermediate_bias = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_intermediate_bias.txt", GELU_max_abs_value);
+    intermediate_bias.setLevel(output[0].getLevel()+1);
+
+    cout << "loaded" << endl;
+
+    output = matmulRElarge(context, evaluator, output, dense_weights, dense_bias, 1); // mask_value = 1
+    cout << "matmulRElarge" << endl;
+
+    output = generate_containers(evaluator, output, 0); // bias = nullptr -> 0
+    cout << "generated containers" << endl;
+
+    for (int i=0; i<output.size(); i++) {
+
+    }
+
+    // block 1
+    // VecMatER
+
+    // block 2
+    // VecMatER
+    // evalRot by -128
+
+    // block 3
+    // VecMatER
+    // evalRot by -256
+
+    // block 4
+    // VecMatER
+    // evalRot by -384
+
+    // Concat blocks
+
+    // wrapup in 4 containers
+
+    // eval GELU(x)
+
+    // unWrap
 
     return 0;
 }
@@ -466,6 +522,37 @@ vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ci
     }
 
     return columns;
+}
+
+vector<Ciphertext> matmulRElarge(Context &context, HomEvaluator &evaluator, vector<Ciphertext>& inputs, const vector<Ciphertext> &weights, const Ciphertext &bias, double mask_val) {
+    vector<Ciphertext> densed;
+
+    for (int i=0; i<inputs.size(); i++) {
+        Ciphertext i_th_result(context);
+        for (int j=weights.size()-1; j>=0; j--) {
+            Ciphertext out(context);
+            evaluator.mult(inputs[i], weights[j], out);
+            out = rotsum(context, evaluator, out, 128, 128);
+
+            out = mask_first_n(context, evaluator, out, 128, mask_val);
+
+            if (j == weights.size() - 1)
+                i_th_result = out;
+            else {
+                //i_th_result = rotate(i_th_result, -128);
+                evaluator.rightRotate(i_th_result, 64, i_th_result); //-64
+                evaluator.rightRotate(i_th_result, 64, i_th_result); //-64
+                
+                evaluator.add(i_th_result, out, i_th_result);
+            }
+        }
+
+        evaluator.add(i_th_result, bias, i_th_result);
+
+        densed.push_back(i_th_result);
+    }
+
+    return densed;
 }
 
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, int row_size, int padding) {
@@ -1034,4 +1121,96 @@ vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphe
     }
 
     return result;
+}
+
+Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertext &c, int n, double mask_value) {
+    // need to verify
+    vector<double> mask;
+
+    for (int i=0; i<num_slots; i++) {
+        if (i<n) {
+            mask.push_back(mask_value);
+        } else {
+            mask.push_back(0);
+        }
+    }
+
+    Message tmp(log2ceil(num_slots));
+    for (size_t i=0; i<num_slots; ++i) {
+        tmp[i] = Complex(mask[i], 0.0);
+    }
+
+    Ciphertext product(context);
+    evaluator.mult(c, tmp, product);
+
+    return product;
+}
+
+vector<Ciphertext> slicing(const vector<Ciphertext> &arr, int X, int Y) {
+    if (Y - X >= arr.size())
+        return arr;
+
+    if (Y > arr.size()) {
+        Y = arr.size();
+    }
+
+    // Starting and Ending iterators
+    auto start = arr.begin() + X;
+    auto end = arr.begin() + Y;
+
+    // To store the sliced vector
+    //vector<Ciphertext> result(Y-X); // HEaaN Ciphertext without default construction
+    //copy(start, end, result.begin());
+
+    // alternative
+    vector<Ciphertext> result;
+    result.reserve(Y-X); // Reserve space to optimize performance
+
+    // Iterate through the specified range and add to result
+    for(auto it = start; it != end; ++it) {
+        result.emplace_back(*it); // copy or move the ciphertext
+    }
+
+    // Return the final sliced vector
+    return result;
+}
+
+Ciphertext wrap_container(HomEvaluator evaluator, vector<Ciphertext> c, int inputs_number) {
+    Ciphertext result = c[0];
+
+    for (int i=1; i<inputs_number; i++) {
+        evaluator.rightRotate(result, 512, result); //-512
+        evaluator.add(result, c[i], result);
+    }
+
+    return result;
+}
+
+vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias) {
+    vector<Ciphertext> containers;
+    vector<int> quantities;
+
+    //This reverse is not fine
+    //reverse(inputs.begin(), inputs.end());
+
+    for (int i=0; i<inputs.size()/32.0; i++) {
+        int quantity = 32;
+        if ((i+1)*32 > inputs.size()) {
+            quantity = inputs.size() - (i * 32);
+        }
+
+        quantities.push_back(quantity);
+
+        vector<Ciphertext> sliced_input = slicing(inputs, (i) * 32, (i + 1) * 32);
+        reverse(sliced_input.begin(), sliced_input.end());
+
+        Ciphertext partial_container = wrap_container(evaluator, sliced_input, quantity);
+
+        if (bias != 0)
+            evaluator.add(partial_container, bias, partial_container);
+        
+        containers.push_back(partial_container);
+    }
+
+    return containers;
 }
