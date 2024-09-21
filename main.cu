@@ -38,6 +38,7 @@ static inline vector<double> read_values_from_file(const string& filename, doubl
 Ciphertext encrypt_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale, int num_inputs);
+Ciphertext encrypt_repeated_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
 Ciphertext rotsum(Context context, HomEvaluator evaluator, Ciphertext &in, int slots, int padding);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias);
 vector<Ciphertext> matmulRE(Context &context, HomEvaluator &evaluator, vector<Ciphertext> rows, const Ciphertext &weight, const Ciphertext &bias, int row_size, int padding);
@@ -58,6 +59,7 @@ Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertex
 vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
 Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree);
 vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> containers, int input_number);
+vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector<vector<Ciphertext>> rows, vector<Ciphertext> weights, const Ciphertext &bias);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -288,6 +290,51 @@ int main(int argc, char *argv[]) {
     //print(context, decryptor, sk, unwrappedLargeOutput[0][0], 128, "Intermediate (Containers)");
     cout << "Bert Intermediate END" << endl;
 
+    // Bert Output
+    Ciphertext output_weight_1 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_weight1.txt", scale);
+    output_weight_1.setLevel(unwrappedLargeOutput[0][0].getLevel());
+    Ciphertext output_weight_2 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_weight2.txt", scale);
+    output_weight_2.setLevel(unwrappedLargeOutput[0][0].getLevel());
+    Ciphertext output_weight_3 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_weight3.txt", scale);
+    output_weight_3.setLevel(unwrappedLargeOutput[0][0].getLevel());
+    Ciphertext output_weight_4 = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_weight4.txt", scale);
+    output_weight_4.setLevel(unwrappedLargeOutput[0][0].getLevel());
+
+    Ciphertext output_bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_output_bias.txt", scale);
+    output_bias.setLevel(unwrappedLargeOutput[0][0].getLevel()+1);
+    cout << "loaded" << endl;
+
+    output = matmulCRlarge(context, evaluator, unwrappedLargeOutput, {output_weight_1, output_weight_2, output_weight_3, output_weight_4}, output_bias);
+    cout << "matmulCRlarge" << endl;
+
+    wrappedOutput = wrapUpExpanded(context, encoder, evaluator, output);
+    cout << "wrappedOutput" << endl;
+
+    evaluator.add(wrappedOutput, output_copy, wrappedOutput);
+    cout << "add" << endl;
+
+    precomputed_mean = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/layer0_output_mean.txt", -1);
+    precomputed_mean.setLevel(wrappedOutput.getLevel());
+    evaluator.add(wrappedOutput, precomputed_mean, wrappedOutput);
+    cout << "add" << endl;
+
+    vy = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_vy.txt", 1);
+    vy.setLevel(wrappedOutput.getLevel());
+    evaluator.mult(wrappedOutput, vy, wrappedOutput);
+    cout << "mult" << endl;
+
+    bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_output_normbias.txt", 1, inputs.size());
+    bias.setLevel(wrappedOutput.getLevel());
+    evaluator.add(wrappedOutput, inputs.size(), wrappedOutput);
+    cout << "add" << endl;
+
+    output = unwrapExpanded(context, evaluator, wrappedOutput, inputs.size());
+    cout << "unwrapExpanded" << endl;
+
+    print_expanded(context, decryptor, sk, output[0], 0, 128, "Output (Expanded)");
+    cout << "Bert Output END" << endl;
+
+
     return 0;
 }
 
@@ -423,6 +470,44 @@ Ciphertext encrypt_expanded_input(Context context, Encryptor encryptor, KeyPack 
         }
         for (int l=0; l<128-num_inputs; l++) {
             repeated.push_back(0);
+        }
+    }
+
+    // pad the vector to match num_slots
+    if (repeated.size() < static_cast<size_t>(num_slots)) {
+        repeated.resize(num_slots, 0.0); // pad with zeros
+    } else if (repeated.size() > static_cast<size_t>(num_slots)) {
+        repeated.resize(num_slots);
+    }
+    //cout << "size: " << repeated.size() << endl;
+
+    // encrypt input embeddings
+    Message tmp_msg(log2ceil(num_slots));
+    for (int j=0; j<repeated.size(); ++j) {
+        tmp_msg[j] = Complex(repeated[j], 0.0);
+    }
+    //cout << "converted." << endl;
+
+    Ciphertext ctxt(context);
+    encryptor.encrypt(tmp_msg, keypack, ctxt);
+    //cout << "encrypted." << endl;
+
+    return ctxt;
+}
+
+
+Ciphertext encrypt_repeated_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale) {
+    vector<double> input_embeddings = read_values_from_file(filename, scale);
+
+    vector<double> repeated;
+    // check
+    if (input_embeddings.size() < 128) {
+        cerr << "Not enough embeddings in file: " << endl;
+    }        
+
+    for (int j=0; j<128; j++) { // 128 bert-tiny hidden layer
+        for (int k=0; k<128; k++) {
+            repeated.push_back(input_embeddings[k]);
         }
     }
 
@@ -1321,3 +1406,38 @@ vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encode
 
     return unwrapped_output;
 }
+
+Ciphertext addVectors(Context context, HomEvaluator evaluator, vector<Ciphertext> c) {
+    // add all ctxt vectors together
+    Ciphertext product = c[0];
+    for (int i=1; i<c.size(); ++i) {
+        evaluator.add(product, c[i], product);
+    }
+
+    return product;
+}
+
+vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector<vector<Ciphertext>> rows, vector<Ciphertext> weights, const Ciphertext &bias) {
+    vector<Ciphertext> output;
+
+    for (int i=0; i<rows.size(); i++) {
+        Ciphertext p1(context);
+        evaluator.mult(rows[i][0], weights[0], p1);
+        Ciphertext p2(context);
+        evaluator.mult(rows[i][0], weights[0], p2);
+        Ciphertext p3(context);
+        evaluator.mult(rows[i][0], weights[0], p3);
+        Ciphertext p4(context);
+        evaluator.mult(rows[i][0], weights[0], p4);
+
+        Ciphertext res = addVectors(context, evaluator, {p1, p2, p3, p4});
+        res = rotsum(context, evaluator, res, 128, 1);
+
+        evaluator.add(res, bias, res);
+
+        output.push_back(res);
+    }
+
+    return output;
+}
+
