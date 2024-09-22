@@ -37,6 +37,7 @@ void setup_environment(int argc, char *argv[]);
 vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, vector<Ciphertext> inputs);
 Ciphertext encoder2(Context context, EnDecoder encoder, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, vector<Ciphertext> inputs);
 Ciphertext pooler(Context context, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, Ciphertext input);
+Ciphertext classifier(Context context, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, Ciphertext input);
 
 static inline vector<double> read_values_from_file(const string& filename, double scale);
 Ciphertext encrypt_input(Context context, Encryptor encryptor, KeyPack keypack, const string& filename, double scale);
@@ -52,9 +53,9 @@ vector<Ciphertext> matmulCR(Context &context, HomEvaluator &evaluator, vector<Ci
 vector<Ciphertext> matmulCR(Context &context, HomEvaluator &evaluator, Bootstrapper bootstrapper, vector<Ciphertext> rows, const Ciphertext& weight, const Ciphertext& bias);
 Ciphertext wrapUpRepeated(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> vectors);
 Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Ciphertext> queries, const Ciphertext &key);
-Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number);
-Ciphertext eval_inverse_naive(Context context, HomEvaluator evaluator, Bootstrapper bootstapper, const Ciphertext &c, double min, double max);
-Ciphertext eval_inverse_naive2(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult);
+Ciphertext eval_exp(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, Ciphertext &c, int inputs_number);
+Ciphertext eval_inverse_naive(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstapper, KeyPack keypack, const Ciphertext &c, double min, double max);
+Ciphertext eval_inverse_naive2(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult);
 vector<Ciphertext> unwrapScoresExpanded(Context context, HomEvaluator evaluator, Ciphertext c, int inputs_num);
 void print(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots, string prefix);
 void print_expanded(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots, int expansion_factor, string prefix);
@@ -62,10 +63,11 @@ Ciphertext wrapUpExpanded(Context context, EnDecoder encoder, HomEvaluator evalu
 vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphertext c, int inputs_num);
 Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertext &c, int n, double mask_value);
 vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
-Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree);
-Ciphertext eval_tanh_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree);
+Ciphertext eval_gelu_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree);
+Ciphertext eval_tanh_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree);
 vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> containers, int input_number);
 vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector<vector<Ciphertext>> rows, vector<Ciphertext> weights, const Ciphertext &bias);
+vector<double> decrypt2vector(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -147,10 +149,98 @@ int main(int argc, char *argv[]) {
     cout << "#Pooler END" << endl;
 
     // Classifier
+    Ciphertext classified = classifier(context, encryptor, decryptor, evaluator, bootstrapper, sk, keypack, pooled);
+    cout << "#Classifier END" << endl;
+
+    // FHE circuit end
+
+    //
+    print(context, decryptor, sk, classified, 2, "Output logits");
+
+    //
+    vector<double> plain_result = decrypt2vector(context, decryptor, sk, classified, 2);
+
+    // END
+
+    //
+    cout << "plain_result[0]: " << plain_result[0] << endl;
+    cout << "plain_result[1]: " << plain_result[1] << endl;
 
     return 0;
 }
 
+vector<double> decrypt2vector(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots) {
+    if (slots == 0) {
+        slots = num_slots;
+    }
+
+    // Decrypt the result
+    Message decrypted_result;
+    decryptor.decrypt(c, sk, decrypted_result);
+
+    // Extract real parts into a vector<double>
+    vector<double> vec;
+    vec.reserve(slots);
+    for (int i=0; i<slots; ++i) {
+        vec.push_back(decrypted_result[i].real());
+    }
+
+    return vec;
+}
+
+Ciphertext classifier(Context context, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, Ciphertext input) {
+    Ciphertext weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/classifier_weight.txt", scale);
+    weight.setLevel(input.getLevel());
+    Ciphertext bias = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/classifier_bias.txt", scale);
+    weight.setLevel(input.getLevel());
+    cout << "load" << endl;
+
+    Ciphertext output(context);
+    evaluator.mult(input, weight, output);
+    cout << "mult" << endl;
+    print(context, decryptor, sk, output, 128, "After Multiplication");
+
+    output = rotsum(context, evaluator, output, 128, 1);
+    cout << "rotsum" << endl;
+    print(context, decryptor, sk, output, 128, "After RotSum");
+
+    evaluator.add(output, bias, output);
+    cout << "add" << endl;
+    print(context, decryptor, sk, output, 128, "After Adding Bias");
+
+    vector<double> mask;
+    for (int i=0; i<num_slots; i++) {
+        mask.push_back(0);
+    }
+
+    mask[0] = 1;
+    mask[128] = 1;
+
+    Message mask_msg(log2ceil(num_slots));
+    for (int i=0; i<mask.size(); ++i) {
+        mask_msg[i] = Complex(mask[i], 0.0);
+    }
+    Ciphertext encrypted_mask(context);
+    encryptor.encrypt(mask_msg, keypack, encrypted_mask);
+    encrypted_mask.setLevel(output.getLevel());
+
+    // Mult
+    evaluator.mult(output, encrypted_mask, output);
+    cout << "mult" << endl;
+
+    // Rotate & Add
+    Ciphertext rotated(context);
+    evaluator.rightRotate(output, 1, rotated); // -1
+    evaluator.leftRotate(rotated, 128, rotated); // 128
+    cout << "rotate" << endl;
+
+    evaluator.add(output, rotated, output);
+    cout << "add" << endl;
+
+    return output;
+}
+
+// Fix later
 Ciphertext pooler(Context context, Encryptor encryptor, Decryptor decryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, SecretKey sk, KeyPack keypack, Ciphertext input) {
 
     double tanhScale = 1 / 30.0;
@@ -164,18 +254,22 @@ Ciphertext pooler(Context context, Encryptor encryptor, Decryptor decryptor, Hom
     Ciphertext output(context);
     evaluator.mult(input, weight, output);
     cout << "mult" << endl;
+    print(context, decryptor, sk, output, 128, "After Multiplication");
 
     output = rotsum(context, evaluator, output, 128, 128);
     cout << "rotsum" << endl;
+    print(context, decryptor, sk, output, 128, "After RotSum");
 
     evaluator.add(output, bias, output);
     cout << "add" << endl;
+    print(context, decryptor, sk, output, 128, "After Adding Bias");
 
     bootstrapper.bootstrap(output, output);
     cout << "bootstrap" << endl;
 
-    output = eval_tanh_function(context, evaluator, bootstrapper, output, -1, 1, tanhScale, 300);
+    output = eval_tanh_function(context, encryptor, evaluator, bootstrapper, keypack, output, -1, 1, tanhScale, 300);
     cout << "eval_tanh_function" << endl;
+    print(context, decryptor, sk, output, 128, "After Applying Tanh");
 
     print(context, decryptor, sk, output, 128, "Pooler (Repeated)");
 
@@ -224,7 +318,7 @@ Ciphertext encoder2(Context context, EnDecoder encoder, Encryptor encryptor, Dec
 
     // section 5 in BertSelfAttention layer
     // Eval e^x[i]
-    scores = eval_exp(context, evaluator, bootstrapper, scores, inputs.size());
+    scores = eval_exp(context, encryptor, evaluator, bootstrapper, keypack, scores, inputs.size());
     //cout << "eval_exp" << endl;
 
     // for encoder2
@@ -241,7 +335,7 @@ Ciphertext encoder2(Context context, EnDecoder encoder, Encryptor encryptor, Dec
     // section 6 Eval 1/x
     // Using Chebyshev Polynomial Approximation
     // for encoder 2
-    Ciphertext scores_denominator = eval_inverse_naive2(context, evaluator, bootstrapper, scores_sum, 3, 145000, 1);
+    Ciphertext scores_denominator = eval_inverse_naive2(context, encryptor, evaluator, bootstrapper, keypack, scores_sum, 3, 145000, 1);
     //cout << "eval 1/x" << endl;
 
     // for encoder 2
@@ -378,7 +472,7 @@ Ciphertext encoder2(Context context, EnDecoder encoder, Encryptor encryptor, Dec
 
     // eval GELU(x)
     for (int i=0; i<output.size(); i++) {
-        output[i] = eval_gelu_function(context, evaluator, bootstrapper, output[i], -1, 1, GELU_max_abs_value, 59);
+        output[i] = eval_gelu_function(context, encryptor, evaluator, bootstrapper, keypack, output[i], -1, 1, GELU_max_abs_value, 59);
         bootstrapper.bootstrap(output[i], output[i]);
     }
     //cout << "eval GELU(x)" << endl;
@@ -474,7 +568,7 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
 
     // section 5 in BertSelfAttention layer
     // Eval e^x[i]
-    scores = eval_exp(context, evaluator, bootstrapper, scores, inputs.size());
+    scores = eval_exp(context, encryptor, evaluator, bootstrapper, keypack, scores, inputs.size());
     ///cout << "eval_exp" << endl;
 
     Ciphertext scores_sum = rotsum(context, evaluator, scores, 128, 128);
@@ -482,7 +576,7 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
 
     // section 6 Eval 1/x
     // Using Chebyshev Polynomial Approximation
-    Ciphertext scores_denominator = eval_inverse_naive(context, evaluator, bootstrapper, scores_sum, 2, 5000);
+    Ciphertext scores_denominator = eval_inverse_naive(context, encryptor, evaluator, bootstrapper, keypack, scores_sum, 2, 5000);
     //cout << "eval 1/x" << endl;
 
     // section 7 EvalMult
@@ -608,7 +702,7 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
 
     // eval GELU(x)
     for (int i=0; i<output.size(); i++) {
-        output[i] = eval_gelu_function(context, evaluator, bootstrapper, output[i], -1, 1, GELU_max_abs_value, 119);
+        output[i] = eval_gelu_function(context, encryptor, evaluator, bootstrapper, keypack, output[i], -1, 1, GELU_max_abs_value, 119);
         bootstrapper.bootstrap(output[i], output[i]);
     }
     //cout << "eval GELU(x)" << endl;
@@ -1202,7 +1296,7 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
 
 // Horner's Method
 // requires 6 multiplications
-Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, Ciphertext &c, int inputs_number) {
+Ciphertext eval_exp(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, Ciphertext &c, int inputs_number) {
     vector<double> coefficients = {1.0, 1.0, 1.0/2.0, 1.0/6.0, 1.0/24.0, 1.0/120.0, 1.0/720.0};
 
     // Initialize res with the constant term (1)
@@ -1215,14 +1309,21 @@ Ciphertext eval_exp(Context context, HomEvaluator evaluator, Bootstrapper bootst
 
     //int counter = 1;
     Ciphertext res(context);
+    encryptor.encrypt(msg, keypack, res);
+    res.setLevel(c.getLevel());
+    //cout << "eval_exp level: " << res.getLevel() << endl;
+
     // Interate from a^n-1 down to a^0
     for (int i=coefficients.size()-2; i>=0; --i) {
         Ciphertext tmp(context);
-        evaluator.mult(c, msg, tmp);
+        evaluator.mult(c, res, tmp);
         //cout << "mult " << counter++ << endl;
 
-        //bootstrapper.bootstrap(tmp, tmp);
-        //cout << "bootstrap" << endl;
+        if (tmp.getLevel() < 3) {
+            tmp.setLevel(3);
+            bootstrapper.bootstrap(tmp, tmp);
+            //cout << "bootstrap" << endl;
+        }
 
         //Encode the coefficient a_i
         Message coef_msg(log2ceil(num_slots));
@@ -1274,7 +1375,7 @@ vector<double> EvalChebyshevCoefficients(function<double(double)> func, double a
         functionPoints[i] = func(cos(PiByDeg * (i+0.5)) * bMinusA + bPlusA);
 
     double multFactor = 2.0 / static_cast<double>(coeffTotal);
-    vector<double> coefficients(coeffTotal);
+    vector<double> coefficients(coeffTotal, 0.0);
     for (size_t i=0; i<coeffTotal; ++i) {
         for (size_t j=0; j<coeffTotal; ++j)
             coefficients[i] += functionPoints[j] * cos(PiByDeg * i * (j+0.5));
@@ -1284,7 +1385,7 @@ vector<double> EvalChebyshevCoefficients(function<double(double)> func, double a
     return coefficients;
 }
 
-Ciphertext eval_inverse_naive(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max) {
+Ciphertext eval_inverse_naive(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max) {
     // Get the coefficients
     vector<double> coefficients = EvalChebyshevCoefficients([](double x) -> double {return 1 / x; }, min, max, 119);
 
@@ -1300,15 +1401,22 @@ Ciphertext eval_inverse_naive(Context context, HomEvaluator evaluator, Bootstrap
 
     //int counter = 1;
     Ciphertext product(context);
+    encryptor.encrypt(msg, keypack, product);
+    product.setLevel(c.getLevel());
+    //cout << "eval_inverse_naive level: " << product.getLevel() << endl;
+
     // Interate from a^n-1 down to a^0
     for (int i=degree-1; i>=0; --i) {
         // Multiply msg by ciphertext (c)
         Ciphertext tmp(context);
-        evaluator.mult(c, msg, tmp);
+        evaluator.mult(c, product, tmp);
         //cout << "mult " << counter++ << endl;
 
-        //bootstrapper.bootstrap(tmp, tmp);
-        //cout << "bootstrap" << endl;
+        if (tmp.getLevel() < 3) {
+            tmp.setLevel(3);
+            bootstrapper.bootstrap(tmp, tmp);
+            //cout << "bootstrap" << endl;
+        }
 
         // Add the current coefficient a^i
         Message coef_msg(log2ceil(num_slots));
@@ -1328,7 +1436,7 @@ Ciphertext eval_inverse_naive(Context context, HomEvaluator evaluator, Bootstrap
 
 }
 
-Ciphertext eval_inverse_naive2(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult) {
+Ciphertext eval_inverse_naive2(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult) {
     // Get the coefficients
     //vector<double> coefficients = EvalChebyshevCoefficients([](double x) -> double {return 1 / x; }, min, max, 119);
     /*
@@ -1358,15 +1466,22 @@ Ciphertext eval_inverse_naive2(Context context, HomEvaluator evaluator, Bootstra
 
     //int counter = 1;
     Ciphertext product(context);
+    encryptor.encrypt(msg, keypack, product);
+    product.setLevel(c.getLevel());
+    //cout << "eval_inverse_naive2 level: " << product.getLevel() << endl;
+
     // Interate from a^n-1 down to a^0
     for (int i=degree-1; i>=0; --i) {
         // Multiply msg by ciphertext (c)
         Ciphertext tmp(context);
-        evaluator.mult(c, msg, tmp);
+        evaluator.mult(c, product, tmp);
         //cout << "mult " << counter++ << endl;
 
-        //bootstrapper.bootstrap(tmp, tmp);
-        //cout << "bootstrap" << endl;
+        if (tmp.getLevel() < 3) {
+            tmp.setLevel(3);
+            bootstrapper.bootstrap(tmp, tmp);
+            //cout << "bootstrap" << endl;
+        }
 
         // Add the current coefficient a^i
         Message coef_msg(log2ceil(num_slots));
@@ -1732,7 +1847,7 @@ vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext
     return containers;
 }
 
-Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree) {
+Ciphertext eval_gelu_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree) {
     // Get the coefficients
     //vector<double> coefficients = EvalChebyshevCoefficients([](double x) -> double {return (0.5 * (x * (1/mult)) * (1 + erf((x * (1/mult)) / 1.41421356237))); }, min, max, degree);
 
@@ -1753,15 +1868,22 @@ Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrap
 
     //int counter = 1;
     Ciphertext product(context);
+    encryptor.encrypt(msg, keypack, product);
+    product.setLevel(c.getLevel());
+    //cout << "eval_gelu_function level: " << product.getLevel() << endl;
+
     // Interate from a^n-1 down to a^0
     for (int i=degree-1; i>=0; --i) {
         // Multiply msg by ciphertext (c)
         Ciphertext tmp(context);
-        evaluator.mult(c, msg, tmp);
+        evaluator.mult(c, product, tmp);
         //cout << "mult " << counter++ << endl;
 
-        //bootstrapper.bootstrap(tmp, tmp);
-        //cout << "bootstrap" << endl;
+        if (tmp.getLevel() < 3) {
+            tmp.setLevel(3);
+            bootstrapper.bootstrap(tmp, tmp);
+            //cout << "bootstrap" << endl;
+        }
 
         // Add the current coefficient a^i
         Message coef_msg(log2ceil(num_slots));
@@ -1780,15 +1902,16 @@ Ciphertext eval_gelu_function(Context context, HomEvaluator evaluator, Bootstrap
     return product;
 }
 
-Ciphertext eval_tanh_function(Context context, HomEvaluator evaluator, Bootstrapper bootstrapper, const Ciphertext &c, double min, double max, double mult, int degree) {
+Ciphertext eval_tanh_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree) {
     // Get the coefficients
     //vector<double> coefficients = EvalChebyshevCoefficients([](double x) -> double {return (0.5 * (x * (1/mult)) * (1 + erf((x * (1/mult)) / 1.41421356237))); }, min, max, degree);
 
-    //
+    // Define the tanh function scaled by mult
     auto func = [mult](double x) -> double {
         return tanh(x / mult);
     };
 
+    // Compute Chebyshev coefficients
     vector<double> coefficients = EvalChebyshevCoefficients(func, min, max, degree);
 
     Message msg(log2ceil(num_slots));
@@ -1800,6 +1923,31 @@ Ciphertext eval_tanh_function(Context context, HomEvaluator evaluator, Bootstrap
 
     //int counter = 1;
     Ciphertext product(context);
+    encryptor.encrypt(msg, keypack, product);
+    product.setLevel(c.getLevel());
+    //cout << "eval_tanh function level: " << product.getLevel() << endl;
+
+    // Interate from a^n-1 down to a^0
+    for (int i=degree-1; i>=0; --i) {
+        Ciphertext tmp(context);
+        evaluator.mult(c, product, tmp);
+
+        if (tmp.getLevel() < 3) {
+            tmp.setLevel(3);
+            bootstrapper.bootstrap(tmp, tmp);
+            //cout << "bootstrap" << endl;
+        }
+
+        Message coef_msg(log2ceil(num_slots));
+        coef_msg[0] = Complex(coefficients[i], 0.0); // a_i
+        for (size_t k=1; k<num_slots; ++k) {
+            coef_msg[k] = Complex(0.0, 0.0);
+        }
+        evaluator.add(tmp, coef_msg, product);
+    }
+
+
+    /*
     // Interate from a^n-1 down to a^0
     for (int i=degree-1; i>=0; --i) {
         // Multiply msg by ciphertext (c)
@@ -1820,9 +1968,10 @@ Ciphertext eval_tanh_function(Context context, HomEvaluator evaluator, Bootstrap
 
         //cout << "loop" << endl;
     }
+    */
 
     bootstrapper.bootstrap(product, product);
-    //cout << "bootstrap" << endl;
+    cout << "bootstrap" << endl;
 
     return product;
 }
