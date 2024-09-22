@@ -62,12 +62,13 @@ void print_expanded(Context context, Decryptor decryptor, SecretKey sk, const Ci
 Ciphertext wrapUpExpanded(Context context, EnDecoder encoder, HomEvaluator evaluator, Bootstrapper bootstrapper, vector<Ciphertext> vectors);
 vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphertext c, int inputs_num);
 Ciphertext mask_first_n(Context context, HomEvaluator evaluator, const Ciphertext &c, int n, double mask_value);
-vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
+vector<Ciphertext> generate_containers(Context context, HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias);
 Ciphertext eval_gelu_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree);
 Ciphertext eval_tanh_function(Context context, Encryptor encryptor, HomEvaluator evaluator, Bootstrapper bootstrapper, KeyPack keypack, const Ciphertext &c, double min, double max, double mult, int degree);
 vector<vector<Ciphertext>> unwrapRepeatedLarge(Context context, EnDecoder encoder, HomEvaluator evaluator, vector<Ciphertext> containers, int input_number);
 vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector<vector<Ciphertext>> rows, vector<Ciphertext> weights, const Ciphertext &bias);
 vector<double> decrypt2vector(Context context, Decryptor decryptor, SecretKey sk, const Ciphertext &c, int slots);
+Ciphertext rotate_ciphertext(Context context, HomEvaluator& evaluator, const Ciphertext& c, int steps);
 
 inline size_t log2ceil(size_t x) {
     size_t y = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(x))));
@@ -192,7 +193,7 @@ Ciphertext classifier(Context context, Encryptor encryptor, Decryptor decryptor,
     Ciphertext weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/classifier_weight.txt", scale);
     weight.setLevel(input.getLevel());
     Ciphertext bias = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/classifier_bias.txt", scale);
-    weight.setLevel(input.getLevel());
+    bias.setLevel(input.getLevel());
     cout << "load" << endl;
 
     Ciphertext output(context);
@@ -229,9 +230,8 @@ Ciphertext classifier(Context context, Encryptor encryptor, Decryptor decryptor,
     cout << "mult" << endl;
 
     // Rotate & Add
-    Ciphertext rotated(context);
-    evaluator.rightRotate(output, 1, rotated); // -1
-    evaluator.leftRotate(rotated, 128, rotated); // 128
+    Ciphertext rotated = rotate_ciphertext(context, evaluator, output, -1);
+    rotated = rotate_ciphertext(context, evaluator, output, 128);
     cout << "rotate" << endl;
 
     evaluator.add(output, rotated, output);
@@ -248,7 +248,7 @@ Ciphertext pooler(Context context, Encryptor encryptor, Decryptor decryptor, Hom
     Ciphertext weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/pooler_dense_weight.txt", tanhScale);
     weight.setLevel(input.getLevel());
     Ciphertext bias = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/pooler_dense_bias.txt", tanhScale);
-    weight.setLevel(input.getLevel());
+    bias.setLevel(input.getLevel());
     cout << "load" << endl;
 
     Ciphertext output(context);
@@ -467,7 +467,7 @@ Ciphertext encoder2(Context context, EnDecoder encoder, Encryptor encryptor, Dec
 
     // Concat blocks
     // wrapup in 4 containers
-    output = generate_containers(evaluator, output, 0); // bias = nullptr -> 0
+    output = generate_containers(context, evaluator, output, 0); // bias = nullptr -> 0
     //cout << "generated containers" << endl;
 
     // eval GELU(x)
@@ -564,50 +564,50 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
     //cout << "wrapped K" << endl;
 
     Ciphertext scores = matmulScores(context, evaluator, Q, K_wrapped);
-    //cout << "scores" << endl;
+    cout << "scores" << endl;
 
     // section 5 in BertSelfAttention layer
     // Eval e^x[i]
     scores = eval_exp(context, encryptor, evaluator, bootstrapper, keypack, scores, inputs.size());
-    ///cout << "eval_exp" << endl;
+    cout << "eval_exp" << endl;
 
     Ciphertext scores_sum = rotsum(context, evaluator, scores, 128, 128);
-    //cout << "rotsum" << endl;
+    cout << "rotsum" << endl;
 
     // section 6 Eval 1/x
     // Using Chebyshev Polynomial Approximation
     Ciphertext scores_denominator = eval_inverse_naive(context, encryptor, evaluator, bootstrapper, keypack, scores_sum, 2, 5000);
-    //cout << "eval 1/x" << endl;
+    cout << "eval 1/x" << endl;
 
     // section 7 EvalMult
     evaluator.mult(scores, scores_denominator, scores);
-    //cout << "scores" << endl;
+    cout << "scores" << endl;
 
     // section 8 Unwrap
     vector<Ciphertext> unwrapped_scores = unwrapScoresExpanded(context,evaluator, scores, inputs.size());
-    //cout << "unwrap" << endl;
+    cout << "unwrap" << endl;
 
     // section 2
     // load weight & bias of value
     Ciphertext value_weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_attself_value_weight.txt", scale);
     value_weight.setLevel(scores.getLevel()-2);
-    //cout << "value_weight" << endl;
+    cout << "value_weight" << endl;
 
     Ciphertext value_bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_attself_value_bias.txt", scale);
     value_bias.setLevel(scores.getLevel()-1);
-    //cout << "value_bias" << endl;
+    cout << "value_bias" << endl;
 
     // VecMatER(weight & bias)
     vector<Ciphertext> V = matmulRE(context, evaluator, inputs, value_weight, value_bias);
-    //cout << "VecMatER" << endl;
+    cout << "VecMatER" << endl;
 
     // WrapRep
     Ciphertext V_wrapped = wrapUpRepeated(context, encoder, evaluator, V);
-    //cout << "wrapRep" << endl;
+    cout << "wrapRep" << endl;
 
     // section 9 VecMatER
     vector<Ciphertext> output = matmulRE(context, evaluator, unwrapped_scores, V_wrapped, 128, 128);
-    //cout << "VecMatER" << endl;
+    cout << "VecMatER" << endl;
 
     //print(context, decryptor, sk, output[0], 128, "Self-Attention (Repeated)");
 
@@ -618,15 +618,15 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
     // load weight & bias of dense
     Ciphertext dense_weight = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_selfoutput_weight.txt", scale);
     dense_weight.setLevel(output[0].getLevel());
-    //cout << "dense_weight" << endl;
+    cout << "dense_weight" << endl;
 
     Ciphertext dense_bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_selfoutput_bias.txt", scale);
     dense_bias.setLevel(output[0].getLevel()+1);
-    //cout << "dense_bias" << endl;
+    cout << "dense_bias" << endl;
 
     // VecMatRC
     output = matmulCR(context, evaluator, bootstrapper, output, dense_weight, dense_bias);
-    //cout << "VecMatRC" << endl;
+    cout << "VecMatRC" << endl;
 
     vector<Ciphertext> output2 = output;
     for (int i=0; i<output.size(); i++) {
@@ -637,25 +637,25 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
 
     // WrapExp xi
     Ciphertext wrappedOutput = wrapUpExpanded(context, encoder, evaluator, bootstrapper, output);
-    //cout << "wrapUpExpanded" << endl;
+    cout << "wrapUpExpanded" << endl;
 
     // Eval sub E
     Ciphertext precomputed_mean = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_selfoutput_mean.txt", -1);
     precomputed_mean.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, precomputed_mean, wrappedOutput);
-    //cout << "sub E" << endl;
+    cout << "sub E" << endl;
 
     // Eval Mult V(p)Y
     Ciphertext vy = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_selfoutput_vy.txt", scale);
     vy.setLevel(wrappedOutput.getLevel());
     evaluator.mult(wrappedOutput, vy, wrappedOutput);
-    //cout << "Mult V(p)Y" << endl;
+    cout << "Mult V(p)Y" << endl;
 
     // Eval Add theta
     Ciphertext bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_selfoutput_normbias.txt", 1, inputs.size());
     bias.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, bias, wrappedOutput);
-    //cout << "Add theta" << endl;
+    cout << "Add theta" << endl;
 
     wrappedOutput.setLevel(3); // error -> bootstrap must >= 3
     //cout << "Level: " << wrappedOutput.getLevel() << endl;
@@ -666,7 +666,7 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
 
     // Unwrap
     output = unwrapExpanded(context, evaluator, wrappedOutput, inputs.size());
-    //cout << "unwrapExpanded" << endl;
+    cout << "unwrapExpanded" << endl;
 
     //
     //print_expanded(context, decryptor, sk, output[0], 0, 128, "Self-Output (Expanded)");
@@ -693,23 +693,23 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
     //cout << "loaded" << endl;
 
     output = matmulRElarge(context, evaluator, output, dense_weights, intermediate_bias, 1); // mask_value = 1
-    //cout << "matmulRElarge" << endl;
+    cout << "matmulRElarge" << endl;
 
     // Concat blocks
     // wrapup in 4 containers
-    output = generate_containers(evaluator, output, 0); // bias = nullptr -> 0
-    //cout << "generated containers" << endl;
+    output = generate_containers(context, evaluator, output, 0); // bias = nullptr -> 0
+    cout << "generated containers" << endl;
 
     // eval GELU(x)
     for (int i=0; i<output.size(); i++) {
         output[i] = eval_gelu_function(context, encryptor, evaluator, bootstrapper, keypack, output[i], -1, 1, GELU_max_abs_value, 119);
         bootstrapper.bootstrap(output[i], output[i]);
     }
-    //cout << "eval GELU(x)" << endl;
+    cout << "eval GELU(x)" << endl;
 
     // unWrap
     vector<vector<Ciphertext>> unwrappedLargeOutput = unwrapRepeatedLarge(context, encoder, evaluator, output, inputs.size());
-    //cout << "unwrappedLargeOutput" << endl;
+    cout << "unwrappedLargeOutput" << endl;
 
     //print(context, decryptor, sk, unwrappedLargeOutput[0][0], 128, "Intermediate (Containers)");
     cout << "Bert Intermediate END" << endl;
@@ -729,31 +729,31 @@ vector<Ciphertext> encoder1(Context context, EnDecoder encoder, Encryptor encryp
     //cout << "loaded" << endl;
 
     output = matmulCRlarge(context, evaluator, unwrappedLargeOutput, {output_weight_1, output_weight_2, output_weight_3, output_weight_4}, output_bias);
-    //cout << "matmulCRlarge" << endl;
+    cout << "matmulCRlarge" << endl;
 
     wrappedOutput = wrapUpExpanded(context, encoder, evaluator, bootstrapper, output);
-    //cout << "wrappedOutput" << endl;
+    cout << "wrappedOutput" << endl;
 
     evaluator.add(wrappedOutput, output_copy, wrappedOutput);
-    //cout << "add" << endl;
+    cout << "add" << endl;
 
     precomputed_mean = encrypt_repeated_input(context, encryptor, keypack, "../weights-sst2/layer0_output_mean.txt", -1);
     precomputed_mean.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, precomputed_mean, wrappedOutput);
-    //cout << "add" << endl;
+    cout << "add" << endl;
 
     vy = encrypt_input(context, encryptor, keypack, "../weights-sst2/layer0_output_vy.txt", 1);
     vy.setLevel(wrappedOutput.getLevel());
     evaluator.mult(wrappedOutput, vy, wrappedOutput);
-    //cout << "mult" << endl;
+    cout << "mult" << endl;
 
     bias = encrypt_expanded_input(context, encryptor, keypack, "../weights-sst2/layer0_output_normbias.txt", 1, inputs.size());
     bias.setLevel(wrappedOutput.getLevel());
     evaluator.add(wrappedOutput, inputs.size(), wrappedOutput);
-    //cout << "add" << endl;
+    cout << "add" << endl;
 
     output = unwrapExpanded(context, evaluator, wrappedOutput, inputs.size());
-    //cout << "unwrapExpanded" << endl;
+    cout << "unwrapExpanded" << endl;
 
     //print_expanded(context, decryptor, sk, output[0], 0, 128, "Output (Expanded)");
     cout << "Bert Output END" << endl;
@@ -963,8 +963,7 @@ Ciphertext rotsum(Context context, HomEvaluator evaluator, Ciphertext &in, int s
         // calculate rotation steps: padding * 2^i
         int rotation_steps = static_cast<int>(padding * pow(2, i));
 
-        Ciphertext rotated(context);
-        evaluator.leftRotate(result, rotation_steps, rotated);
+        Ciphertext rotated = rotate_ciphertext(context, evaluator, result, rotation_steps);
 
         evaluator.add(result, rotated, result);
     }
@@ -1027,21 +1026,25 @@ vector<Ciphertext> matmulRElarge(Context &context, HomEvaluator &evaluator, vect
 
     for (int i=0; i<inputs.size(); i++) {
         Ciphertext i_th_result(context);
-        for (int j=weights.size()-1; j>=0; j--) {
+        bool first = true;
+
+        for (int j=0; j<weights.size(); j++) {
             Ciphertext out(context);
             evaluator.mult(inputs[i], weights[j], out);
+
             out = rotsum(context, evaluator, out, 128, 128);
 
             out = mask_first_n(context, evaluator, out, 128, mask_val);
 
-            if (j == weights.size() - 1)
+            if (first) {
                 i_th_result = out;
-            else {
+                first = false;
+            } else {
                 //i_th_result = rotate(i_th_result, -128);
-                evaluator.rightRotate(i_th_result, 64, i_th_result); //-64
-                evaluator.rightRotate(i_th_result, 64, i_th_result); //-64
-                
-                evaluator.add(i_th_result, out, i_th_result);
+                Ciphertext rotated = rotate_ciphertext(context, evaluator, i_th_result, -128);
+                //rotated = rotate_ciphertext(context, evaluator, rotated, -64);
+
+                evaluator.add(rotated, out, i_th_result);
             }
         }
 
@@ -1194,14 +1197,14 @@ Ciphertext matmulScores(Context context, HomEvaluator evaluator, vector<Cipherte
     double r = 1/8.0; //Later corrected with e^(x/r)
 
     Ciphertext scores_wrapped = mask_heads(context, evaluator, scores[scores.size()-1], 1/8.0*r);
-    Ciphertext rotated(context);
-    evaluator.rightRotate(scores_wrapped, 1, rotated);
+    Ciphertext rotated = rotate_ciphertext(context, evaluator, scores_wrapped, -1);
 
     for (int i=scores.size()-2; i>=0; i--) {
         Ciphertext mask_headed =  mask_heads(context, evaluator, scores[i], 1/8.0*r);
         evaluator.add(rotated, mask_headed, rotated);
 
-        if (i>0) evaluator.rightRotate(scores_wrapped, 1, rotated);
+        if (i>0)
+            rotated = rotate_ciphertext(context, evaluator, scores_wrapped, -1);
     }
 
     return rotated;
@@ -1556,13 +1559,8 @@ Ciphertext repeat(Context context, HomEvaluator evaluator, const Ciphertext &in,
     Ciphertext res = in;
 
     for (int i=0; i<log2(slots); i++) {
-        Ciphertext rotated(context);
-
-        u64 value = -pow(2, i); // -pow(2,i)
-        if (value>0)
-            evaluator.leftRotate(res, value, rotated);
-        else
-            evaluator.rightRotate(res, value, rotated);
+        int value = -static_cast<int>(pow(2, i)); // -pow(2,i)
+        Ciphertext rotated = rotate_ciphertext(context, evaluator, res, value);
 
         evaluator.add(res, rotated, res);
     }
@@ -1574,13 +1572,8 @@ Ciphertext repeat(Context context, HomEvaluator evaluator, const Ciphertext &in,
     Ciphertext res = in;
 
     for (int i=0; i<log2(slots); i++) {
-        Ciphertext rotated(context);
-
         u64 value = padding*-pow(2, i); // -pow(2,i)
-        if (value>0)
-            evaluator.leftRotate(res, value, rotated);
-        else
-            evaluator.rightRotate(res, value, rotated);
+        Ciphertext rotated = rotate_ciphertext(context, evaluator, res, value);
             
         evaluator.add(res, rotated, res);
     }
@@ -1598,7 +1591,7 @@ vector<Ciphertext> unwrapScoresExpanded(Context context, HomEvaluator evaluator,
         i_th_2 = repeat(context, evaluator, i_th_2, 64);
 
         if (i<inputs_num-1)
-            evaluator.leftRotate(c, 1, c);
+            c = rotate_ciphertext(context, evaluator, c, 1);
         
         Ciphertext product(context);
         evaluator.add(i_th_1, i_th_2, product);
@@ -1726,14 +1719,14 @@ Ciphertext wrapUpExpanded(Context context, EnDecoder encoder, HomEvaluator evalu
     //cout << "masked" << endl;
 
     if (vectors.size() > 1) {
-        evaluator.rightRotate(masked, 1, masked);
+        masked = rotate_ciphertext(context, evaluator, masked, -1);
     };
 
     for (int i=vectors.size()-2; i>=0; i--) {
         evaluator.add(masked, mask_mod_n(context, evaluator, vectors[i], 128), masked);
 
         if (i > 0)
-            evaluator.rightRotate(masked, 1, masked);
+            masked = rotate_ciphertext(context, evaluator, masked, -1);
     };
 
     return masked;
@@ -1747,7 +1740,7 @@ vector<Ciphertext> unwrapExpanded(Context context, HomEvaluator evaluator, Ciphe
         out = repeat(context, evaluator, out, 128);
 
         if (i < inputs_num-1)
-            evaluator.leftRotate(c, 1, c);
+            c = rotate_ciphertext(context, evaluator, c, 1);
 
         result.push_back(out);
     }
@@ -1807,18 +1800,18 @@ vector<Ciphertext> slicing(const vector<Ciphertext> &arr, int X, int Y) {
     return result;
 }
 
-Ciphertext wrap_container(HomEvaluator evaluator, vector<Ciphertext> c, int inputs_number) {
+Ciphertext wrap_container(Context context, HomEvaluator evaluator, vector<Ciphertext> c, int inputs_number) {
     Ciphertext result = c[0];
 
     for (int i=1; i<inputs_number; i++) {
-        evaluator.rightRotate(result, 512, result); //-512
+        result = rotate_ciphertext(context, evaluator, result, -512);
         evaluator.add(result, c[i], result);
     }
 
     return result;
 }
 
-vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias) {
+vector<Ciphertext> generate_containers(Context context, HomEvaluator evaluator, vector<Ciphertext> inputs, const double& bias) {
     vector<Ciphertext> containers;
     vector<int> quantities;
 
@@ -1836,7 +1829,7 @@ vector<Ciphertext> generate_containers(HomEvaluator evaluator, vector<Ciphertext
         vector<Ciphertext> sliced_input = slicing(inputs, (i) * 32, (i + 1) * 32);
         reverse(sliced_input.begin(), sliced_input.end());
 
-        Ciphertext partial_container = wrap_container(evaluator, sliced_input, quantity);
+        Ciphertext partial_container = wrap_container(context, evaluator, sliced_input, quantity);
 
         if (bias != 0)
             evaluator.add(partial_container, bias, partial_container);
@@ -2039,11 +2032,11 @@ vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector
         Ciphertext p1(context);
         evaluator.mult(rows[i][0], weights[0], p1);
         Ciphertext p2(context);
-        evaluator.mult(rows[i][0], weights[0], p2);
+        evaluator.mult(rows[i][1], weights[1], p2);
         Ciphertext p3(context);
-        evaluator.mult(rows[i][0], weights[0], p3);
+        evaluator.mult(rows[i][2], weights[2], p3);
         Ciphertext p4(context);
-        evaluator.mult(rows[i][0], weights[0], p4);
+        evaluator.mult(rows[i][3], weights[3], p4);
 
         Ciphertext res = addVectors(context, evaluator, {p1, p2, p3, p4});
         res = rotsum(context, evaluator, res, 128, 1);
@@ -2054,4 +2047,18 @@ vector<Ciphertext> matmulCRlarge(Context context, HomEvaluator evaluator, vector
     }
 
     return output;
+}
+
+Ciphertext rotate_ciphertext(Context context, HomEvaluator& evaluator, const Ciphertext& c, int steps) {
+    Ciphertext rotated(context);
+
+    if (steps > 0) {
+        evaluator.leftRotate(c, steps, rotated);
+    } else if (steps < 0) {
+        evaluator.rightRotate(c, abs(steps), rotated);
+    } else {
+        rotated = c;
+    }
+
+    return rotated;
 }
