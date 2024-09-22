@@ -1,4 +1,4 @@
-CMakeFiles/test.dir/main.cu.o : /home/tony/Github/project/main.cu \
+CMakeFiles/test.dir/main.cu.o : /home/tony/Github/he_project/main.cu \
     /usr/include/stdc-predef.h \
     /usr/local/cuda-12.6/bin/../targets/x86_64-linux/include/cuda_runtime.h \
     /usr/local/cuda-12.6/bin/../targets/x86_64-linux/include/crt/host_config.h \
@@ -314,20 +314,6 @@ CMakeFiles/test.dir/main.cu.o : /home/tony/Github/project/main.cu \
     /usr/include/c++/13/numeric \
     /usr/include/c++/13/bits/stl_numeric.h \
     /usr/include/c++/13/pstl/glue_numeric_defs.h \
-    /phantom/util.cuh \
-    /usr/include/c++/13/iomanip \
-    /usr/include/c++/13/locale \
-    /usr/include/c++/13/bits/locale_facets_nonio.h \
-    /usr/include/x86_64-linux-gnu/c++/13/bits/time_members.h \
-    /usr/include/x86_64-linux-gnu/c++/13/bits/messages_members.h \
-    /usr/include/libintl.h \
-    /usr/include/c++/13/bits/locale_facets_nonio.tcc \
-    /usr/include/c++/13/bits/locale_conv.h \
-    /usr/include/c++/13/bits/quoted_string.h \
-    /usr/include/c++/13/sstream \
-    /usr/include/c++/13/bits/sstream.tcc \
-    /usr/local/cuda-12.6/bin/../targets/x86_64-linux/include/cuda.h \
-    /usr/local/cuda-12.6/bin/../targets/x86_64-linux/include/curand.h \
     /usr/include/x86_64-linux-gnu/sys/stat.h \
     /usr/include/x86_64-linux-gnu/bits/stat.h \
     /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
@@ -350,6 +336,17 @@ CMakeFiles/test.dir/main.cu.o : /home/tony/Github/project/main.cu \
     /usr/include/c++/13/filesystem \
     /usr/include/c++/13/bits/fs_fwd.h \
     /usr/include/c++/13/bits/fs_path.h \
+    /usr/include/c++/13/locale \
+    /usr/include/c++/13/bits/locale_facets_nonio.h \
+    /usr/include/x86_64-linux-gnu/c++/13/bits/time_members.h \
+    /usr/include/x86_64-linux-gnu/c++/13/bits/messages_members.h \
+    /usr/include/libintl.h \
+    /usr/include/c++/13/bits/locale_facets_nonio.tcc \
+    /usr/include/c++/13/bits/locale_conv.h \
+    /usr/include/c++/13/iomanip \
+    /usr/include/c++/13/bits/quoted_string.h \
+    /usr/include/c++/13/sstream \
+    /usr/include/c++/13/bits/sstream.tcc \
     /usr/include/c++/13/codecvt \
     /usr/include/c++/13/ext/concurrence.h \
     /usr/include/c++/13/bits/shared_ptr.h \
@@ -359,9 +356,9 @@ CMakeFiles/test.dir/main.cu.o : /home/tony/Github/project/main.cu \
     /usr/include/c++/13/ext/aligned_buffer.h \
     /usr/include/c++/13/bits/fs_dir.h \
     /usr/include/c++/13/bits/fs_ops.h \
-    /home/tony/Github/project/HEaaN/HEaaN.hpp \
-    /home/tony/Github/project/HEaaN/Bootstrapper.hpp \
-    /home/tony/Github/project/HEaaN/Context.hpp \
+    /home/tony/Github/he_project/HEaaN/HEaaN.hpp \
+    /home/tony/Github/he_project/HEaaN/Bootstrapper.hpp \
+    /home/tony/Github/he_project/HEaaN/Context.hpp \
     /usr/include/c++/13/memory \
     /usr/include/c++/13/bits/stl_raw_storage_iter.h \
     /usr/include/c++/13/bits/align.h \
@@ -370,42 +367,42 @@ CMakeFiles/test.dir/main.cu.o : /home/tony/Github/project/main.cu \
     /usr/include/c++/13/bits/atomic_lockfree_defines.h \
     /usr/include/c++/13/backward/auto_ptr.h \
     /usr/include/c++/13/pstl/glue_memory_defs.h \
-    /home/tony/Github/project/HEaaN/Integers.hpp \
-    /home/tony/Github/project/HEaaN/ParameterPreset.hpp \
-    /home/tony/Github/project/HEaaN/HEaaNExport.hpp \
-    /home/tony/Github/project/HEaaN/SecurityLevel.hpp \
-    /home/tony/Github/project/HEaaN/device/Device.hpp \
-    /home/tony/Github/project/HEaaN/device/../Exception.hpp \
-    /home/tony/Github/project/HEaaN/device/../device/CudaTools.hpp \
+    /home/tony/Github/he_project/HEaaN/Integers.hpp \
+    /home/tony/Github/he_project/HEaaN/ParameterPreset.hpp \
+    /home/tony/Github/he_project/HEaaN/HEaaNExport.hpp \
+    /home/tony/Github/he_project/HEaaN/SecurityLevel.hpp \
+    /home/tony/Github/he_project/HEaaN/device/Device.hpp \
+    /home/tony/Github/he_project/HEaaN/device/../Exception.hpp \
+    /home/tony/Github/he_project/HEaaN/device/../device/CudaTools.hpp \
     /usr/include/c++/13/set \
     /usr/include/c++/13/bits/stl_tree.h \
     /usr/include/c++/13/bits/node_handle.h \
     /usr/include/c++/13/bits/stl_set.h \
     /usr/include/c++/13/bits/stl_multiset.h \
     /usr/include/c++/13/bits/erase_if.h \
-    /home/tony/Github/project/HEaaN/Real.hpp \
+    /home/tony/Github/he_project/HEaaN/Real.hpp \
     /usr/include/c++/13/complex \
-    /home/tony/Github/project/HEaaN/Ciphertext.hpp \
-    /home/tony/Github/project/HEaaN/Pointer.hpp \
-    /home/tony/Github/project/HEaaN/Decryptor.hpp \
-    /home/tony/Github/project/HEaaN/EnDecoder.hpp \
-    /home/tony/Github/project/HEaaN/Encryptor.hpp \
-    /home/tony/Github/project/HEaaN/HomEvaluator.hpp \
-    /home/tony/Github/project/HEaaN/KeyPack.hpp \
-    /home/tony/Github/project/HEaaN/KeyGenerator.hpp \
+    /home/tony/Github/he_project/HEaaN/Ciphertext.hpp \
+    /home/tony/Github/he_project/HEaaN/Pointer.hpp \
+    /home/tony/Github/he_project/HEaaN/Decryptor.hpp \
+    /home/tony/Github/he_project/HEaaN/EnDecoder.hpp \
+    /home/tony/Github/he_project/HEaaN/Encryptor.hpp \
+    /home/tony/Github/he_project/HEaaN/HomEvaluator.hpp \
+    /home/tony/Github/he_project/HEaaN/KeyPack.hpp \
+    /home/tony/Github/he_project/HEaaN/KeyGenerator.hpp \
     /usr/include/c++/13/optional \
     /usr/include/c++/13/bits/enable_special_members.h \
-    /home/tony/Github/project/HEaaN/Message.hpp \
+    /home/tony/Github/he_project/HEaaN/Message.hpp \
     /usr/include/c++/13/iterator \
     /usr/include/c++/13/bits/stream_iterator.h \
-    /home/tony/Github/project/HEaaN/Plaintext.hpp \
-    /home/tony/Github/project/HEaaN/Randomseeds.hpp \
+    /home/tony/Github/he_project/HEaaN/Plaintext.hpp \
+    /home/tony/Github/he_project/HEaaN/Randomseeds.hpp \
     /usr/include/c++/13/array \
     /usr/include/c++/13/compare \
-    /home/tony/Github/project/HEaaN/SecretKey.hpp \
-    /home/tony/Github/project/HEaaN/multiparty/CollectiveKeyGenConfig.hpp \
-    /home/tony/Github/project/HEaaN/multiparty/CollectiveKeyGenData.hpp \
-    /home/tony/Github/project/HEaaN/multiparty/CollectiveKeyGenerator.hpp \
+    /home/tony/Github/he_project/HEaaN/SecretKey.hpp \
+    /home/tony/Github/he_project/HEaaN/multiparty/CollectiveKeyGenConfig.hpp \
+    /home/tony/Github/he_project/HEaaN/multiparty/CollectiveKeyGenData.hpp \
+    /home/tony/Github/he_project/HEaaN/multiparty/CollectiveKeyGenerator.hpp \
     /usr/include/c++/13/functional \
     /usr/include/c++/13/bits/std_function.h \
     /usr/include/c++/13/unordered_map \
